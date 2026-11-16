@@ -62,8 +62,7 @@ nav button{white-space:nowrap}
 }
 </style>
 <style id="pageStyle">@page{size:A4 portrait;margin:0}</style>
-<script>window.CPB_CLIENT_ID="44564654327-p4fmtnt7cpbbm3ssgr53qujqbj8c9dfh.apps.googleusercontent.com";</script>
-</head>
+<script>window.CPB_CLIENT_ID="44564654327-p4fmtnt7cpbbm3ssgr53qujqbj8c9dfh.apps.googleusercontent.com";</script></head>
 <body>
 <header>
   <h1>Étiquettes &amp; affiches · La Corbeille Paul Bert</h1>
@@ -193,11 +192,11 @@ nav button{white-space:nowrap}
   <div class="card">
     <h2>Imprimer</h2>
     <div class="row">
-      <label>Format : <select id="fFmt"><option value="land">A4 paysage (1 produit / page)</option><option value="list">A4 portrait liste (7 / page)</option><option value="a6">A6 × 4 à piquer</option></select></label>
-      <button class="b y" id="fPdf">Créer le PDF</button><button class="b2" id="fPrint">Imprimer (navigateur)</button>
+      <label>Format : <select id="fFmt"><option value="land">A4 paysage (1 produit / page)</option><option value="list">A4 portrait liste (7 / page)</option><option value="a6">A6 × 4 à piquer</option><option value="caisse">Fiche de caisse (codes à scanner, 12 / page)</option></select></label>
+      <button class="b2" id="fCaisseSel">Sélectionner tous les F&amp;L en saison</button><button class="b y" id="fPdf">Créer le PDF</button><button class="b2" id="fPrint">Imprimer (navigateur)</button>
       <span class="mut">Échelle 100 %. Pour l'A4 paysage, le sens paysage est réglé automatiquement.</span>
     </div>
-    <div id="fWarn"></div>
+    <p class="mut" id="fCaisseInfo" style="display:none">Fiche à poser à côté de la caisse : le caissier flashe le code du produit (les produits au kilo se pèsent ensuite). Fruits puis légumes, par ordre alphabétique. Les produits hors saison ne sont pas ajoutés par le bouton « en saison ». Imprimer à 100 %, sans réduction, sinon les codes peuvent mal se lire.</p><div id="fWarn"></div>
   </div>
   <div class="preview" id="fPrev"></div>
 </section>
@@ -387,7 +386,7 @@ const COUNTRY={MAROC:'MA',ESPAGNE:'ES',FRANCE:'FR',ITALIE:'IT',HOLLANDE:'NL','PA
 function autoIll(lib){const u=norm(lib).length?String(lib).toUpperCase().normalize('NFD').replace(/[̀-ͯ]/g,''):'';for(const [r,k] of KW)if(r.test(u))return k;return ''}
 function flOf(o){const s=SETF[o.e]||{};const u=String(o.lib).toUpperCase().normalize('NFD').replace(/[̀-ͯ]/g,'');
  const ill=s.ill??autoIll(o.lib);let ori=s.ori;if(ori==null){ori='';for(const [n,c] of Object.entries(COUNTRY))if(u.includes(n))ori=c;if(!ori&&ill&&D.ori[ill]&&D.ori[ill].length===1)ori=D.ori[ill][0]}
- const unit=s.unit??(/SAC/.test(u)?'le sac':/BOTTE|PERSIL|CORIANDRE|MENTHE/.test(u)?'la botte':/PAR 3|X3|3 TETES/.test(u)?'les 3':'le kg');
+ const unit=s.unit??(/SAC/.test(u)?'le sac':/SALADE|ICEBERG|BATAVIA|CELERI|MAIS/.test(u)?'la pièce':/FRAISE|BARQ/.test(u)?'la barquette':/BOTTE|PERSIL|CORIANDRE|MENTHE/.test(u)?'la botte':/PAR 3|X3|3 TETES/.test(u)?'les 3':'le kg');
  let nom=s.nom??(D.lab[ill]&&!/SAC|PAR 3/.test(u)?D.lab[ill]:o.lib.charAt(0)+o.lib.slice(1).toLowerCase());return {ill,ori,unit,nom,cat:s.cat??'Cat. I',info:s.info??''}}
 const hexa=(c,a)=>`rgba(${parseInt(c.slice(1,3),16)},${parseInt(c.slice(3,5),16)},${parseInt(c.slice(5,7),16)},${a})`;
 const ACC=k=>D.acc[k]||'#43A047';
@@ -415,8 +414,16 @@ function a6(o){const f=flOf(o),[main,sub]=splitNom(f.nom),ac=ACC(f.ill);let pb;
  const sb=sub?`<div style="background:${ac};color:#fff;font-weight:900;font-size:18px;padding:3px 14px;border-radius:30px;margin-top:8px;text-transform:uppercase">${esc(sub)}</div>`:'';
  return `<div style="width:397px;height:561px;position:relative;box-sizing:border-box;padding:54px 22px 18px;display:flex;flex-direction:column;align-items:center;font-family:InterE,Arial;color:#000;overflow:hidden">${awning(397,38,ac,12)}${disc(f.ill,196,184)}<div style="display:flex;align-items:center;gap:10px;margin-top:12px">${flagB(f.ori,54)}<div style="display:flex;flex-direction:column"><span style="font-size:11px;font-weight:700">Origine</span><span style="font-weight:900;font-size:20px;line-height:1">${oriName(f.ori)}</span></div></div><div style="font-weight:900;font-size:${nfs(main,40)}px;line-height:1;letter-spacing:-1.5px;text-transform:uppercase;text-align:center;margin-top:8px">${esc(main)}</div>${sb}<div style="font-size:14px;font-weight:700;margin-top:6px;text-align:center">${ment(f)}</div><div style="flex-grow:1"></div>${pb}</div>`}
 function a6Pages(l){let s='';for(let i=0;i<l.length;i+=4){const it=l.slice(i,i+4);s+=`<div class="pg"><div style="display:grid;grid-template-columns:repeat(2,397px);grid-template-rows:561px 561px">${it.map(a6).join('')}${'<div></div>'.repeat(4-it.length)}</div><div style="position:absolute;left:396px;top:0;height:1122px;border-left:2px dashed #8a8a8a"></div><div style="position:absolute;left:0;top:561px;width:794px;border-top:2px dashed #8a8a8a"></div></div>`}return s}
+// ---- fiche de caisse F&L (codes à flasher) ----
+const isFruitK=k=>FRUITS.has(k);
+function caisseSort(l){return l.slice().sort((a,b)=>{const fa=flOf(a),fb=flOf(b);return (isFruitK(fb.ill)-isFruitK(fa.ill))||fa.nom.localeCompare(fb.nom,'fr')})}
+const CPP=12;
+function caisseCard(o){const f=flOf(o),kg=f.unit==='le kg';
+ const pr=o.prix!=null?`<span style="font-weight:900;font-size:30px;letter-spacing:-1px">${fmt(o.prix)}&#8239;€</span> <span style="font-weight:900;font-size:15px">${esc(f.unit)}</span>`:`<span style="font-weight:900;font-size:18px;color:#c62828">PRIX À DÉFINIR</span>`;
+ return `<div style="box-sizing:border-box;border:2px solid #000;border-radius:14px;padding:8px 10px;display:flex;flex-direction:column;overflow:hidden"><div style="display:flex;gap:10px;align-items:center;height:96px">${disc(f.ill,92,80,'18px')}<div style="display:flex;flex-direction:column;gap:4px;min-width:0"><span style="font-weight:900;font-size:${f.nom.length<=14?22:f.nom.length<=20?18:14}px;line-height:1.05;text-transform:uppercase;white-space:nowrap;overflow:hidden">${esc(f.nom)}</span><div style="display:flex;align-items:center;gap:6px">${f.ori?flagB(f.ori,34)+`<span style="font-size:12px;font-weight:900">${oriName(f.ori)}</span>`:''}${kg?'<span style="background:#000;color:#fff;font-size:11px;font-weight:900;padding:2px 7px;border-radius:10px">À PESER</span>':''}</div><div>${pr}</div></div></div><div style="flex-grow:1;display:flex;align-items:center;justify-content:center">${barcode(o.e,220,48,11)}</div></div>`}
+function caissePages(l0){const l=caisseSort(l0);let s='';const n=Math.ceil(l.length/CPP);for(let p=0;p<n;p++){const it=l.slice(p*CPP,p*CPP+CPP);s+=`<div class="pg"><div style="width:794px;height:1122px;position:relative;overflow:hidden;box-sizing:border-box;padding:56px 30px 24px;font-family:InterE,Arial;color:#000;display:flex;flex-direction:column">${awning(794,34,'#43A047',24)}<div style="display:flex;justify-content:space-between;align-items:flex-end;border-bottom:6px solid #000;padding-bottom:8px;margin-bottom:10px"><div style="font-weight:900;font-size:28px;line-height:.9;letter-spacing:-1px;white-space:nowrap">FICHE CAISSE · FRUITS &amp; LÉGUMES</div><div style="font-size:14px;font-weight:700;text-align:right">Flasher le code du produit<br>${new Date().toLocaleDateString('fr-FR')} · ${p+1}/${n}</div></div><div style="display:grid;grid-template-columns:1fr 1fr;grid-template-rows:repeat(6,1fr);gap:10px 14px;flex-grow:1">${it.map(caisseCard).join('')}</div></div></div>`}return s}
 // pages en px (96 dpi) : A4 = 794 × 1123
-const FLPAGES=()=>{const l=SELF.map(e=>P[e]).filter(Boolean);const f=$('#fFmt').value;return [f==='land'?l.map(land).join(''):f==='list'?listPages(l):a6Pages(l),f==='land',l]};
+const FLPAGES=()=>{const l=SELF.map(e=>P[e]).filter(Boolean);const f=$('#fFmt').value;return [f==='land'?l.map(land).join(''):f==='list'?listPages(l):f==='caisse'?caissePages(l):a6Pages(l),f==='land',l]};
 const ILLOPTS=()=>Object.keys(D.ill).sort((a,b)=>(D.lab[a]||a).localeCompare(D.lab[b]||b)).map(k=>[k,D.lab[k]||k]);
 const ORIOPTS=()=>Object.entries(D.flags).sort((a,b)=>a[1][1].localeCompare(b[1][1]));
 function renderF(){const q=norm($('#fq').value);const sel=new Set(SELF);let l=Object.values(P).filter(o=>($('#fAll').checked||isFL(o))&&(!$('#fSelOnly').checked||sel.has(o.e))&&(!q||norm(o.lib).includes(q)));
@@ -430,7 +437,8 @@ $('#fBody').addEventListener('change',e=>{const tr=e.target.closest('tr');if(!tr
  if(c.contains('fc')){if(e.target.checked){if(!SELF.includes(ea))SELF.push(ea)}else SELF=SELF.filter(x=>x!==ea);save();$('#fCount').textContent=`${SELF.length} sélectionné(s)`;prevF();return}
  if(c.contains('fi')){setF(ea,'ill',e.target.value);renderF();return}if(c.contains('fo'))setF(ea,'ori',e.target.value);if(c.contains('fu'))setF(ea,'unit',e.target.value);if(SELF.includes(ea))prevF()});
 $('#fBody').addEventListener('input',e=>{const tr=e.target.closest('tr');if(!tr)return;const ea=tr.dataset.e,c=e.target.classList;if(c.contains('fp')){setPrice(ea,e.target.value);e.target.classList.toggle('pv-mod',CHG[ea]?.prix!=null);if(SELF.includes(ea))prevF();return}if(c.contains('fn'))setF(ea,'nom',e.target.value);if(c.contains('fk'))setF(ea,'cat',e.target.value);if(c.contains('fv'))setF(ea,'info',e.target.value);if(SELF.includes(ea))prevF()});
-['#fq'].forEach(s=>$(s).addEventListener('input',renderF));['#fAll','#fSelOnly'].forEach(s=>$(s).onchange=renderF);$('#fFmt').onchange=prevF;$('#fClear').onclick=()=>{SELF=[];save();renderF()};
+['#fq'].forEach(s=>$(s).addEventListener('input',renderF));['#fAll','#fSelOnly'].forEach(s=>$(s).onchange=renderF);$('#fFmt').onchange=()=>{$('#fCaisseInfo').style.display=$('#fFmt').value==='caisse'?'':'none';prevF()};
+$('#fCaisseSel').onclick=()=>{const l=Object.values(P).filter(o=>{if(!isFL(o))return false;const k=autoIll(o.lib);if(!k)return false;const d=HIST[k];return d?days(d)<=SEUIL_J:key(CHG[o.e]?.groupe||o.grp||'')!=='HORS SAISON'});SELF=l.map(o=>o.e);save();$('#fFmt').value='caisse';$('#fFmt').onchange();renderF();toast?.(`${l.length} produit(s) en saison sélectionné(s)`)};$('#fClear').onclick=()=>{SELF=[];save();renderF()};
 $('#fPrint').onclick=()=>{const [h,isL,l]=FLPAGES();if(!l.length)return alert('Sélectionnez au moins un produit.');doPrint(h,isL)};
 // ================= APPLI : modules factures, prix, imports StorePOS, saison, Drive, partage =================
 const H0={"oignon_jaune_sac5": "2026-11-12", "pdt_vrac": "2026-11-12", "pdt_agatha_sac5": "2026-11-12", "oignon_rouge": "2026-11-12", "tomate_ronde": "2026-11-12", "piment_vert": "2026-11-12", "concombre_mini": "2026-11-12", "ail_3": "2026-11-12", "orange": "2026-11-12", "banane": "2026-11-12", "raisin_blanc": "2026-11-12", "raisin_red_globe": "2026-11-12", "pomme_rouge": "2026-11-12", "grenade": "2026-11-12", "carotte_sac5": "2026-11-07", "poire": "2026-11-07", "oignon_blanc": "2026-11-07", "clementine": "2026-11-07", "golden": "2026-10-20", "kiwi": "2026-10-20", "avocat": "2026-10-13", "citron": "2026-09-19", "nectarine_jaune": "2026-09-26", "prune_rouge": "2026-09-26", "kaki": "2026-09-26", "courge": "2026-09-26", "melon_jaune": "2026-09-26", "melon_vert": "2026-09-24", "pasteque": "2026-09-24", "figue": "2026-09-15", "mangue": "2026-09-15", "prune_jaune": "2026-09-15", "peche_jaune": "2026-09-15", "concombre": "2026-09-10", "salade_iceberg": "2026-09-07", "tomate_grappe": "2026-08-25", "figue_barbarie": "2026-08-19", "nectarine_blanche": "2026-08-15", "pdt_agria": "2026-08-15", "abricot": "2026-08-01", "menthe": "2026-07-28", "tomate_plateau": "2026-07-18", "persil_plat": "2026-07-10", "ail": "2026-07-08", "tomate_roma": "2026-06-30", "pdt_nouvelle": "2026-06-27", "cerise": "2026-06-24", "fraise": "2026-06-15", "coriandre": "2026-06-15", "courgette": "2026-06-13", "mais": "2026-06-06", "salade_batavia": "2026-05-16", "royal_gala": "2026-03-23", "raisin_noir": "2026-03-28", "gingembre": "2026-03-05", "poivron_long": "2026-03-05", "ail_pele": "2026-03-06", "celeri": "2026-02-25", "pomme_fuji": "2026-01-19", "prune": "2026-02-20"}; // dernières dates d'achat Agrifresh 2026 (factures lues le 16/11/2026)
@@ -690,10 +698,10 @@ function bitsOf(code){if(!/^\d+$/.test(code)||!((code.length===13||code.length==
  if(code.length===13){const p=PAR[d[0]];return {bits:'101'+[1,2,3,4,5,6].map((k,i)=>(p[i]==='L'?LP:GP)[d[k]]).join('')+'01010'+[7,8,9,10,11,12].map(k=>RP[d[k]]).join('')+'101',g:[0,1,2,45,46,47,48,49,92,93,94]}}
  return {bits:'101'+[0,1,2,3].map(k=>LP[d[k]]).join('')+'01010'+[4,5,6,7].map(k=>RP[d[k]]).join('')+'101',g:[0,1,2,31,32,33,34,35,64,65,66]}}
 // code-barres dessiné en pixels réels : module = 0,25 mm = 3 px
-function drawBarcode(ctx,code,x,y,w,h){const b=bitsOf(code);const T=ctx.getTransform();ctx.save();
+function drawBarcode(ctx,code,x,y,w,h,mod=3){const b=bitsOf(code);const T=ctx.getTransform();ctx.save();
  if(!b){ctx.fillStyle='#c62828';ctx.font=F(700,13);ctx.textAlign='center';ctx.fillText('code '+code+' non imprimable',x+w/2,y+h/2);ctx.restore();return}
  const p0=T.transformPoint(new DOMPoint(x,y)),p1=T.transformPoint(new DOMPoint(x+w,y+h));ctx.setTransform(1,0,0,1,0,0);
- const mod=3,n=b.bits.length,bw=n*mod,X=Math.round((p0.x+p1.x)/2-bw/2),H=p1.y-p0.y,fs=Math.round(H*0.2),bh=Math.round(H-fs-2);ctx.fillStyle='#000';
+ const n=b.bits.length,bw=n*mod,X=Math.round((p0.x+p1.x)/2-bw/2),H=p1.y-p0.y,fs=Math.round(H*0.2),bh=Math.round(H-fs-2);ctx.fillStyle='#000';
  for(let i=0;i<n;){if(b.bits[i]==='1'){let j=i;while(b.bits[j]==='1')j++;ctx.fillRect(X+i*mod,Math.round(p0.y),(j-i)*mod,bh+(b.g.includes(i)?Math.round(fs*.5):0));i=j}else i++}
  ctx.font=F(700,fs);ctx.textBaseline='alphabetic';const yb=p1.y-1;
  if(code.length===13){ctx.textAlign='right';ctx.fillText(code[0],X-mod,yb);ctx.textAlign='center';ctx.fillText(code.slice(1,7),X+24*mod,yb);ctx.fillText(code.slice(7),X+71*mod,yb)}else{ctx.textAlign='center';ctx.fillText(code.slice(0,4),X+17*mod,yb);ctx.fillText(code.slice(4),X+50*mod,yb)}
@@ -739,7 +747,20 @@ async function rowList(ctx,o,y,h){const f=flOf(o);const cy=y+h/2;await discC(ctx
  await flagC(ctx,f.ori,fx+6,cy-30,66);ctx.font=F(900,12);ctx.textAlign='center';ctx.fillText(oriName(f.ori),fx+39,cy+30);ctx.textAlign='left';
  const px=794-42-pw;if(o.prix!=null){ctx.fillStyle='#000';ctx.fillRect(px,cy-42,pw,84);ctx.fillStyle='#FFD400';ctx.fillRect(px+3,cy-39,pw-6,78);ctx.fillStyle='#000';ctx.textAlign='right';ctx.font=F(900,54);ctx.fillText(fmt(o.prix)+' €',px+pw-14,cy+12);ctx.font=F(900,17);ctx.fillText(f.unit,px+pw-14,cy+34);ctx.textAlign='left'}else hatch(ctx,px,cy-42,pw,84,22,'à saisir dans StorePOS');
  ctx.fillStyle='#000';ctx.fillRect(42,y+h-2,794-84,2)}
+async function cardCaisse(ctx,o,x,y,w,h){const f=flOf(o),kg=f.unit==='le kg';ctx.save();ctx.strokeStyle='#000';ctx.lineWidth=2;rr(ctx,x+1,y+1,w-2,h-2,14);ctx.stroke();
+ await discC(ctx,f.ill,x+10+46,y+8+48,92,80,false);const tx=x+112,tw=w-112-10;ctx.fillStyle='#000';ctx.textAlign='left';ctx.textBaseline='alphabetic';
+ const nm=f.nom.toUpperCase();let fs=24;ctx.font=F(900,fs);while(ctx.measureText(nm).width>tw&&fs>12){fs--;ctx.font=F(900,fs)}let ty=y+10;ctx.fillText(nm,tx,ty+fs*.8);ty+=Math.max(fs,20)+6;let bx=tx;ctx.font=F(900,12);if(f.ori){await flagC(ctx,f.ori,tx,ty,34);ctx.fillStyle='#000';ctx.font=F(900,12);const on=oriName(f.ori);ctx.fillText(on,tx+40,ty+16);bx=tx+40+ctx.measureText(on).width+8}
+ if(kg){ctx.font=F(900,11);const bw=ctx.measureText('À PESER').width+14;if(bx+bw<=x+w-8){rr(ctx,bx,ty+3,bw,18,9);ctx.fill();ctx.fillStyle='#fff';ctx.fillText('À PESER',bx+7,ty+16);ctx.fillStyle='#000'}}
+ ty+=24;if(o.prix!=null){ctx.font=F(900,30);const pt=fmt(o.prix)+' €';ctx.fillText(pt,tx,ty+26);const pw=ctx.measureText(pt).width;ctx.font=F(900,15);ctx.fillText(f.unit,tx+pw+8,ty+26)}else{ctx.fillStyle='#c62828';ctx.font=F(900,18);ctx.fillText('PRIX À DÉFINIR',tx,ty+22);ctx.fillStyle='#000'}
+ drawBarcode(ctx,o.e,x+10,y+h-52,w-20,46,4);ctx.restore()}
+async function pagesCaisse(list0){const list=caisseSort(list0),pages=[];const n=Math.ceil(list.length/CPP);
+ for(let p=0;p<n;p++){const {c,x}=newPage(210,297);x.save();x.scale(210*PXMM/794,210*PXMM/794);x.fillStyle='#fff';x.fillRect(0,0,794,1122);awningC(x,794,34,'#43A047',24);
+  x.fillStyle='#000';x.textAlign='left';x.font=F(900,28);x.fillText('FICHE CAISSE · FRUITS & LÉGUMES',30,92);x.textAlign='right';x.font=F(700,14);x.fillText('Flasher le code du produit',764,76);x.fillText(`${new Date().toLocaleDateString('fr-FR')} · ${p+1}/${n}`,764,94);x.fillRect(30,102,734,6);
+  const it=list.slice(p*CPP,p*CPP+CPP),top=118,gx=14,gy=10,cw=(734-gx)/2,ch=(1122-24-top-gy*5)/6;
+  for(let i=0;i<it.length;i++)await cardCaisse(x,it[i],30+(i%2)*(cw+gx),top+Math.floor(i/2)*(ch+gy),cw,ch);x.restore();pages.push({c,w:210,h:297})}
+ return pages}
 async function pagesFL(list,fmtv){const pages=[];
+ if(fmtv==='caisse')return pagesCaisse(list);
  if(fmtv==='land'){for(const o of list){const {c,x}=newPage(297,210);x.save();x.scale(297*PXMM/1123,297*PXMM/1123);await posterLand(x,o);x.restore();pages.push({c,w:297,h:210})}}
  else if(fmtv==='list'){const n=Math.ceil(list.length/7);for(let p=0;p<n;p++){const {c,x}=newPage(210,297);x.save();x.scale(210*PXMM/794,210*PXMM/794);x.fillStyle='#fff';x.fillRect(0,0,794,1122);awningC(x,794,40,'#E53935',24);
   x.fillStyle='#000';x.font=F(900,44);x.textAlign='left';x.fillText('PRIX DE LA SEMAINE',42,104);x.textAlign='right';x.font=F(700,17);x.fillText('TTC',752,84);x.fillText(`Fruits & légumes · ${p+1}/${n}`,752,106);x.fillRect(42,118,710,8);
@@ -769,7 +790,7 @@ async function buildPdf(pages){const te=new TextEncoder();const chunks=[];let of
  const xo=off;let x=`xref\n0 ${id}\n0000000000 65535 f \n`;for(let i=1;i<id;i++)x+=String(xref[i]).padStart(10,'0')+' 00000 n \n';push(x+`trailer\n<< /Size ${id} /Root 1 0 R >>\nstartxref\n${xo}\n%%EOF`);return new Blob(chunks,{type:'application/pdf'})}
 async function makePdf(kind){await document.fonts.load('900 40px InterE');await document.fonts.load('700 20px InterE');let pages,name;const d=new Date(),st=`${String(d.getFullYear()).slice(2)}${String(d.getMonth()+1).padStart(2,'0')}${String(d.getDate()).padStart(2,'0')}-${String(d.getHours()).padStart(2,'0')}${String(d.getMinutes()).padStart(2,'0')}`;
  if(kind==='g'){const l=selListG();if(!l.length)throw new Error('Sélectionnez au moins un produit.');pages=await pagesGondole(l,$('#gForce').value);name=`ETIQUETTES-GONDOLE-${st}.pdf`}
- else{const l=SELF.map(e=>P[e]).filter(Boolean);if(!l.length)throw new Error('Sélectionnez au moins un produit.');const fv=$('#fFmt').value;pages=await pagesFL(l,fv);name=`AFFICHES-FL-${fv==='land'?'A4-PAYSAGE':fv==='list'?'A4-LISTE':'A6'}-${st}.pdf`}
+ else{const l=SELF.map(e=>P[e]).filter(Boolean);if(!l.length)throw new Error('Sélectionnez au moins un produit.');const fv=$('#fFmt').value;pages=await pagesFL(l,fv);name=fv==='caisse'?`FICHE-CAISSE-FL-${st}.pdf`:`AFFICHES-FL-${fv==='land'?'A4-PAYSAGE':fv==='list'?'A4-LISTE':'A6'}-${st}.pdf`}
  return {name,blob:await buildPdf(pages),n:pages.length}}
 
 // ================= Scan de codes-barres (caméra de l'iPhone ou douchette) =================
