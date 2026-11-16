@@ -89,6 +89,7 @@ nav button{white-space:nowrap}
   <div class="card">
     <h2>Lire une facture</h2>
     <p class="mut"><b>Le plus fiable : le PDF</b> reçu par mail (Metro, Mondial, Agrifresh…) : lecture exacte, sans erreur de chiffre. La photo reste possible pour les factures papier.</p>
+    <label style="display:block;margin:6px 0 10px;font-weight:700">Fournisseur de la facture<br><select id="invSup" style="width:100%;max-width:360px;font-size:16px;padding:6px"><option value="">Détection automatique</option></select></label>
     <div class="row"><button class="b y big" id="invDrive">📥 Factures du Drive</button>
     <label class="b y big" style="display:inline-block;cursor:pointer">📄 Ouvrir un PDF<input type="file" id="invPdf" accept="application/pdf,.pdf,image/*" multiple style="display:none"></label></div>
     <div class="row" style="margin-top:6px"><label class="b2" style="cursor:pointer">📷 Photo (papier)<input type="file" id="invPhoto" accept="image/*" capture="environment" multiple style="display:none"></label>
@@ -139,7 +140,7 @@ nav button{white-space:nowrap}
   <div class="card">
     <h2>Codes StorePOS (familles, sous-familles, groupes, rayons)</h2>
     <p class="mut">L'export donne des noms, l'import demande des codes. Un nom absent de cette liste bloque la ligne d'import (on ne devine jamais un code). Une ligne par code : <code>NOM = code</code>.</p>
-    <div class="row" style="align-items:flex-start"><label>Familles<br><textarea id="mFam" rows="5" cols="34"></textarea></label><label>Sous-familles<br><textarea id="mSfam" rows="5" cols="34"></textarea></label><label>Groupes<br><textarea id="mGrp" rows="5" cols="28"></textarea></label><label>Rayons<br><textarea id="mRay" rows="5" cols="28"></textarea></label></div>
+    <div class="row" style="align-items:flex-start"><label>Familles<br><textarea id="mFam" rows="5" cols="34"></textarea></label><label>Sous-familles<br><textarea id="mSfam" rows="5" cols="34"></textarea></label><label>Groupes<br><textarea id="mGrp" rows="5" cols="28"></textarea></label><label>Rayons<br><textarea id="mRay" rows="5" cols="28"></textarea></label><label>Fournisseurs (nom = code StorePOS)<br><textarea id="mFour" rows="5" cols="34"></textarea></label></div>
     <button class="b2" id="mSave">Enregistrer les codes</button>
   </div>
   <div class="card">
@@ -154,7 +155,7 @@ nav button{white-space:nowrap}
   <div class="card">
     <h2>Choisir les produits</h2>
     <div class="row">
-      <input type="text" id="gq" placeholder="Rechercher (nom ou code-barres)…" style="width:280px">
+      <div id="gUnk" style="flex-basis:100%;margin-bottom:8px"></div><input type="text" id="gq" placeholder="Rechercher (nom ou code-barres)…" style="width:280px"><select id="gSup"><option value="">Tous les fournisseurs</option></select>
       <label><input type="checkbox" id="gTopOnly"> Top Vente seulement</label>
       <label><input type="checkbox" id="gNoFL" checked> Sans fruits &amp; légumes</label>
       <label><input type="checkbox" id="gSelOnly"> Sélectionnés seulement</label>
@@ -266,15 +267,15 @@ async function loadFile(file,kind){const ab=await file.arrayBuffer();let rows;
  if(/\.xlsx$/i.test(file.name))rows=await readXlsx(ab);else rows=readCsv(new TextDecoder(/\uFFFD/.test(new TextDecoder().decode(ab.slice(0,2000)))?'windows-1252':'utf-8').decode(ab));
  let hi=rows.findIndex(r=>r&&r.some(c=>/CODEBAR|CODE.?\/.?EAN|^EAN$/i.test(String(c||'').trim())));if(hi<0)hi=0;const h=rows[hi].map(x=>String(x||''));
  const cE=findCol(h,['CODEBAR','Code / EAN','EAN','Code barre','Code']);const cL=findCol(h,['LIBELLE','Désignation','Libellé','Designation']);
- const cP=findCol(h,['PRIX1','Prix vente TTC','PV TTC','Prix TTC']);const cD=findCol(h,['Département','Departement','Rayon']);const cQ=findCol(h,['Qté vendue','Qte vendue','Quantité vendue','Qté']);const cF=h.findIndex(x=>norm(x)==='FAMILLE'),cS=h.findIndex(x=>norm(x)==='SOUSFAMILLE'),cG=h.findIndex(x=>norm(x)==='GROUPE'),cR=h.findIndex(x=>norm(x)==='RAYON'),cA=findCol(h,["Prix d'achat HT",'Prix achat']);const cFo=h.findIndex(x=>/^FOURNISSEURACTIF$|^FOURNISSEUR$/.test(norm(x)));
+ const cP=findCol(h,['PRIX1','Prix vente TTC','PV TTC','Prix TTC']);const cD=findCol(h,['Département','Departement','Rayon']);const cQ=findCol(h,['Qté vendue','Qte vendue','Quantité vendue','Qté']);const cF=h.findIndex(x=>norm(x)==='FAMILLE'),cS=h.findIndex(x=>norm(x)==='SOUSFAMILLE'),cG=h.findIndex(x=>norm(x)==='GROUPE'),cR=h.findIndex(x=>norm(x)==='RAYON'),cA=findCol(h,["Prix d'achat HT",'Prix achat']);const cFo=h.findIndex(x=>/^FOURNISSEURACTIF$|^FOURNISSEUR$/.test(norm(x)));const cRf=h.findIndex(x=>/^REFFOURNISSEUR$/.test(norm(x)));
  if(cE<0||cL<0){alert('Colonnes introuvables : il faut au moins un code-barres et un libellé.');return}
  let n=0;for(const r of rows.slice(hi+1)){if(!r)continue;const e=eanStr(r[cE]);if(!e)continue;const lib=String(r[cL]??'').trim();if(!lib||lib==='nan')continue;
   const o=P[e]||(P[e]={e,lib,prix:null,dep:'',q:null});
-  if(kind==='base'){o.lib=lib;o.prix=cP>=0?num(r[cP]):o.prix;o.prix0=o.prix;o.dep=cD>=0?String(r[cD]??''):o.dep;o.fromBase=1;const g=i=>i>=0?String(r[i]??'').trim():'';o.fam=g(cF);o.sfam=g(cS);o.grp=g(cG);o.ray=g(cR);o.pa0=cA>=0?num(r[cA]):null;o.four=cFo>=0?String(r[cFo]??'').replace(/^nan$/,'').trim():'';delete o.neuf}
+  if(kind==='base'){o.lib=lib;o.prix=cP>=0?num(r[cP]):o.prix;o.prix0=o.prix;o.dep=cD>=0?String(r[cD]??''):o.dep;o.fromBase=1;const g=i=>i>=0?String(r[i]??'').trim():'';o.fam=g(cF);o.sfam=g(cS);o.grp=g(cG);o.ray=g(cR);o.pa0=cA>=0?num(r[cA]):null;o.four=cFo>=0?String(r[cFo]??'').replace(/^nan$/,'').trim():'';o.reff=cRf>=0?String(r[cRf]??'').replace(/^nan$/,'').trim():'';delete o.neuf}
   else{if(cQ>=0){const q=num(r[cQ]);o.q=(o.q&&o.seenV?o.q:0)+(q||0);o.seenV=1}if(o.prix==null&&cP>=0)o.prix=num(r[cP]);if(!o.dep&&cD>=0)o.dep=String(r[cD]??'');if(!o.fromBase)o.lib=lib}
   n++}
  Object.values(P).forEach(o=>delete o.seenV);
- META[kind]={name:file.name,n,date:new Date().toLocaleString('fr-FR')};TOKIDX=null;
+ META[kind]={name:file.name,n,date:new Date().toLocaleString('fr-FR')};TOKIDX=null;REFDB=null;
  for(const [e,c] of Object.entries(CHG)){if(P[e]&&c.prix!=null&&P[e].prix0!=null&&Math.abs(P[e].prix0-c.prix)<0.005){delete c.prix;if(!Object.keys(c).filter(k=>!['src','date'].includes(k)).length)delete CHG[e]}}
  for(const e of Object.keys(NEWF))if(P[e]&&P[e].fromBase)delete NEWF[e];applyChg();LS.set('cpb_meta',META);LS.set('cpb_products',P);if(typeof saveApp==='function')saveApp();showSum()}
 function showSum(){const all=Object.values(P);$('#stBase').textContent=META.base?`${META.base.name} · ${META.base.n} lignes · ${META.base.date}`:'Aucun fichier';$('#stVentes').textContent=META.ventes?`${META.ventes.name} · ${META.ventes.n} lignes · ${META.ventes.date}`:'Aucun fichier';
@@ -331,7 +332,7 @@ function selListG(){let l=SELG.map(e=>P[e]).filter(Boolean);const ord=$('#gOrder
 const isFL=o=>/FRUIT|LEG/i.test(o.dep||'');
 let gTimer;
 function renderG(){const q=norm($('#gq').value);const all=Object.values(P);const sel=new Set(SELG);
- let l=all.filter(o=>(!$('#gNoFL').checked||!isFL(o))&&(!$('#gTopOnly').checked||isTop(o))&&(!$('#gSelOnly').checked||sel.has(o.e))&&(!q||norm(o.lib).includes(q)||o.e.includes(q)||norm(nameOf(o)).includes(q)));
+ let l=all.filter(o=>(!$('#gNoFL').checked||!isFL(o))&&(!$('#gTopOnly').checked||isTop(o))&&(!$('#gSelOnly').checked||sel.has(o.e))&&(!$('#gSup').value||sameSup(o.four,$('#gSup').value))&&(!q||norm(o.lib).includes(q)||o.e.includes(q)||norm(nameOf(o)).includes(q)||(o.reff&&norm(o.reff)===q)));
  l.sort((a,b)=>(sel.has(b.e)-sel.has(a.e))||((b.q||0)-(a.q||0)));const shown=l.slice(0,300);
  $('#gBody').innerHTML=shown.map(o=>{const nm=nameOf(o),m=modelOf(o);return `<tr data-e="${o.e}"><td><input type="checkbox" class="gc" ${sel.has(o.e)?'checked':''}></td><td class="mut">${o.e}</td><td>${esc(o.lib)}</td><td><input type="text" class="nm-in gn" value="${esc(nm)}"></td><td class="gs">${sizeTag(nm,m==='top')}</td><td><input type="text" inputmode="decimal" class="pv-in gp ${CHG[o.e]?.prix!=null?'pv-mod':''}" value="${o.prix!=null?String(o.prix.toFixed(2)).replace('.',','):''}" placeholder="sans prix" title="Modifier le prix crée une ligne d'import StorePOS"></td><td>${o.q!=null?Math.round(o.q):'–'} ${isTop(o)?'<span class="pill p-top">TOP</span>':''}</td><td><select class="gm"><option value="">auto (${isTop(o)?'Top':'Std'})</option><option value="std" ${FORCE[o.e]==='std'?'selected':''}>Standard</option><option value="top" ${FORCE[o.e]==='top'?'selected':''}>Top Vente</option></select></td></tr>`}).join('')||`<tr><td colspan="8" class="mut">${all.length?'Aucun produit pour ce filtre.':'Importez d\'abord votre fichier produits (onglet 1).'}</td></tr>`;
  $('#gMore').textContent=l.length>300?`${l.length} produits trouvés : affinez la recherche pour voir les suivants.`:'';
@@ -427,7 +428,7 @@ const FRUITS=new Set(['golden','pomme_fuji','royal_gala','pomme_rouge','poire','
 const today=()=>new Date().toISOString().slice(0,10);
 const days=d=>d?Math.floor((Date.now()-new Date(d+'T12:00:00').getTime())/864e5):9999;
 // ---------- prix effectif (modifié dans l'appli) ----------
-function applyChg(){for(const [e,c] of Object.entries(CHG)){const o=P[e];if(!o)continue;if(o.prix0===undefined)o.prix0=o.prix;if(c.prix!=null)o.prix=c.prix}for(const [e,f] of Object.entries(NEWF)){if(!P[e])P[e]={e,lib:f.lib,prix:f.prix,dep:'FRUITS ET LEG. TAUX REDUIT',q:null,neuf:1,grp:'FRUIT ET LEGUME'}}}
+function applyChg(){for(const [e,c] of Object.entries(CHG)){const o=P[e];if(!o)continue;if(o.prix0===undefined)o.prix0=o.prix;if(c.prix!=null)o.prix=c.prix}for(const [e,f] of Object.entries(NEWF)){if(!P[e]&&f.kind==='epi')P[e]={e,lib:f.lib,prix:f.prix,dep:f.dep,four:f.four,reff:f.reff,fam:f.fam,q:null,neuf:1};if(!P[e])P[e]={e,lib:f.lib,prix:f.prix,dep:'FRUITS ET LEG. TAUX REDUIT',q:null,neuf:1,grp:'FRUIT ET LEGUME'}}}
 function setPrice(e,v){const o=P[e];if(!o)return;if(o.prix0===undefined)o.prix0=o.prix;const n=num(v);if(n==null||Math.abs(n-(o.prix0??-1))<0.005){if(CHG[e]){delete CHG[e].prix;if(!Object.keys(CHG[e]).filter(k=>!['src','date'].includes(k)).length)delete CHG[e]}o.prix=o.prix0}else{CHG[e]=Object.assign(CHG[e]||{},{prix:Math.round(n*100)/100,date:today()});o.prix=CHG[e].prix}if(NEWF[e])NEWF[e].prix=o.prix;saveApp();updBadge()}
 function updBadge(){const n=Object.keys(CHG).length+Object.keys(NEWF).length;document.querySelectorAll('.impBadge').forEach(b=>{b.textContent=n?` (${n})`:''})}
 // ---------- lecture des factures (photo -> texte -> lignes) ----------
@@ -450,13 +451,22 @@ async function pdfRead(file){const L=await pdfLib();const doc=await L.getDocumen
   rows.sort((a,b)=>b.y-a.y);for(const r of rows){r.a.sort((a,b)=>a.x-b.x);text+=r.a.map(i=>i.s).join(' ')+'\n'}}
  return {text,imgs}}
 let REFMAP=LS.get('cpb_refmap',{});
+const SN=s=>key(s||'').replace(/[^A-Z0-9]/g,''),RN=r=>String(r||'').toUpperCase().replace(/\s/g,'').replace(/^0+/,'');
+let CASC=LS.get('cpb_casc',[]),REFDB=null;   // CASC : [fournisseur, réf, EAN, désignation] (feuille « Cascade EAN » du Drive)
+function refDb(){if(REFDB)return REFDB;REFDB={ref:{},des:{}};const put=(s,r,e,d)=>{e=eanStr(e);if(!e)return;if(!P[e]&&P[e.padStart(13,'0')])e=e.padStart(13,'0');if(!P[e])return;const sn=SN(s);if(!sn)return;if(r)REFDB.ref[sn+'|'+RN(r)]=e;if(d){const k=TOK(d).join(' ');if(k)REFDB.des[sn+'|'+k]=e}};
+ for(const o of Object.values(P))if(o.reff&&o.four)put(o.four,o.reff,o.e);for(const [s,r,e,d] of CASC)put(s,r,e,d);for(const [k,e] of Object.entries(REFMAP)){const i=k.indexOf('|');put(k.slice(0,i),k.slice(i+1),e)}return REFDB}
+function supList(){const s=new Map();const add=n=>{n=String(n||'').trim();if(n&&n!=='nan'&&!s.has(SN(n)))s.set(SN(n),n)};['AGRIFRESH','METRO','PROMOCASH','AGIDRA','MONDIAL DISTRIBUTION','DCA DISTRIBUTION','GLOBAL FOOD','AZ DISTRIBUTION','TRADCO FRANCE','SANNATI IMPEX'].forEach(add);CASC.forEach(r=>add(r[0]));Object.values(P).forEach(o=>add(o.four));return [...s.values()].sort()}
+const sameSup=(a,b)=>{a=SN(a);b=SN(b);return !!a&&!!b&&(a===b||a.startsWith(b)||b.startsWith(a))};
+function supCanon(d){const n=SN(d);if(!n||n==='AUTRE')return 'AUTRE';const l=supList();return l.find(x=>SN(x)===n)||l.find(x=>sameSup(x,d))||l.find(x=>SN(x).includes(n))||d}
+function supOpts(sel,first){return (first?`<option value="">${first}</option>`:'')+supList().map(s=>`<option ${sameSup(s,sel)?'selected':''}>${esc(s)}</option>`).join('')}
+function parseCsv(s){const out=[];let row=[],f='',q=false;for(let i=0;i<s.length;i++){const c=s[i];if(q){if(c==='"'){if(s[i+1]==='"'){f+='"';i++}else q=false}else f+=c}else if(c==='"')q=true;else if(c===','){row.push(f);f=''}else if(c==='\n'){row.push(f.replace(/\r$/,''));out.push(row);row=[];f=''}else f+=c}if(f||row.length){row.push(f);out.push(row)}return out}
 const DEC=/^\d{1,5}[.,]\d{2,4}$/,UNITS=/^(U|UN|UNI|PCE|PC|PCS|KG|COL|CT|CRT|X|L|BT|BTE|PQT|SAC|LOT|FD|EUR|€|HT|TTC)$/;
 // ligne produit, toutes factures : [réf] [EAN] désignation … quantités … PU … montant [TVA]
 function genLine(l,sup){let tk=l.split(' ').filter(Boolean);if(tk.length<3)return null;
  if(/^(5[.,]5|5[.,]50|20|20[.,]00?|10|10[.,]00?|2[.,]1)%?$/.test(tk[tk.length-1])&&tk.filter(w=>DEC.test(w)).length>=3)tk.pop();while(tk.length&&/^(€|EUR|[A-D])$/i.test(tk[tk.length-1]))tk.pop();
  const decs=tk.map((w,i)=>[w,i]).filter(([w])=>DEC.test(w));const em=l.match(/\b(\d{12,13}|\d{8})\b/);if(decs.length<2&&!(em&&decs.length))return null;
  let i0=0,ref='';if(tk[0]&&/\d/.test(tk[0])&&/^[A-Z0-9][A-Z0-9.\-\/]{2,14}$/i.test(tk[0])&&!DEC.test(tk[0])&&!(em&&tk[0]===em[1])){ref=tk[0];i0=1}
- let ean='';if(em){ean=em[1];const k=tk.indexOf(ean);if(k>=i0&&k<=i0+2)i0=k+1}
+ let ean='';if(em){ean=em[1];const k=tk.indexOf(ean);if(k>=i0&&k<=i0+2)i0=k+1}if(!ref&&/^\d{4,8}$/.test(tk[i0]||'')&&/[A-Za-z]/.test(tk[i0+1]||'')){ref=tk[i0];i0++}
  let last=-1;for(let i=i0;i<tk.length;i++)if(/[A-Za-zÀ-ÿ]{2,}/.test(tk[i])&&!UNITS.test(key(tk[i])))last=i;if(last<i0)return null;
  const des=tk.slice(i0,last+1).join(' ').replace(/^[-*]+|[-*]+$/g,'').trim();if((des.match(/[A-Za-zÀ-ÿ]/g)||[]).length<4)return null;
  const after=tk.slice(last+1),nums=after.filter(w=>DEC.test(w)).map(fixNum),ints=after.filter(w=>/^\d{1,4}$/.test(w)).map(Number);if(!nums.length)return null;
@@ -468,29 +478,29 @@ const EANS=()=>Object.keys(P);
 function fixEan(s){s=s.replace(/\D/g,'');if(P[s])return s;if(s.length===12){for(const e of EANS())if(e.length===13){for(let i=0;i<13;i++)if(e.slice(0,i)+e.slice(i+1)===s)return e}}return ''}
 const TOK=s=>key(s).replace(/[^A-Z0-9 ]/g,' ').split(' ').filter(w=>w.length>=3&&!/^(KG|GR|BTE|PQT|CT|LOT|PAV|IDS|POUR|AVEC|SANS|LES|DES|UHT)$/.test(w));
 let TOKIDX=null;function tokIndex(){TOKIDX={};for(const o of Object.values(P))for(const w of new Set(TOK(o.lib)))(TOKIDX[w]||(TOKIDX[w]=[])).push(o.e);return TOKIDX}
-function fuzzy(des,onlyFL){const idx=TOKIDX||tokIndex();const sc={};for(const w of new Set(TOK(des)))for(const e of (idx[w]||[])){if(onlyFL&&!isFL(P[e]))continue;sc[e]=(sc[e]||0)+1}let best='',bs=0;for(const [e,s] of Object.entries(sc)){const n=TOK(P[e].lib).length||1;const v=s-0.15*Math.max(0,n-s);if(v>bs){bs=v;best=e}}return bs>=1?best:''}
+function fuzzy(des,onlyFL,sup){const idx=TOKIDX||tokIndex();const sc={};for(const w of new Set(TOK(des)))for(const e of (idx[w]||[])){if(onlyFL&&!isFL(P[e]))continue;sc[e]=(sc[e]||0)+1}let best='',bs=0;for(const [e,s] of Object.entries(sc)){const n=TOK(P[e].lib).length||1;const v=s-0.15*Math.max(0,n-s)+(sup&&sameSup(P[e].four,sup)?0.6:0);if(v>bs){bs=v;best=e}}return bs>=1?best:''}
 function flFiche(k){if(!k)return '';const c=Object.values(P).filter(o=>isFL(o)&&autoIll(o.lib)===k);c.sort((a,b)=>(b.q||0)-(a.q||0));return c[0]?c[0].e:''}
-function parseInvoice(text){const sup=detectSupplier(text),date=invDate(text),out=[];const lines=text.split(/\n/).map(l=>l.replace(/\s+/g,' ').trim()).filter(Boolean);
+function parseInvoice(text,forced){const sup=forced||supCanon(detectSupplier(text)),date=invDate(text),out=[];const lines=text.split(/\n/).map(l=>l.replace(/\s+/g,' ').trim()).filter(Boolean);
  for(const l of lines){const u=key(l);if(/TOTAL|MONTANT|TVA|FACTURE|PAGE|CLIENT|CAPITAL|SIRET|PRIX AU KG|DESIGNATION|EUR$|ECHEANCE|BL N/.test(u))continue;
   if(sup==='AGRIFRESH'){let ci=-1,cn='';for(const c of COUNTRIES){const i=u.indexOf(' '+c);if(i>0&&(ci<0||i<ci)){ci=i;cn=c}}if(ci<0){const k0=autoIll(l),nn=(l.match(/\d+[.,]\d{2}/g)||[]).length;if(!k0||nn<2)continue;const fm=l.search(/\s\S*\d/);ci=fm>3?fm:l.length;cn=''}
    let des=l.slice(0,ci).replace(/[|\]\[]/g,' ').replace(/\s1\s*$/,'').replace(/\s+/g,' ').trim();if(des.length<4)continue;const nums=(l.slice(ci).match(/[\dOo][\dOo.,|\]!:]*/g)||[]).map(fixNum).filter(x=>x!=null);
    const mt=nums.length?nums[nums.length-1]:null,pu=nums.length>1?nums[nums.length-2]:null;const k=autoIll(des);const egg=/OEUF/.test(u);
    const fe=egg?'':(flFiche(k)||fuzzy(des,true));const fk=fe?autoIll(P[fe].lib):'';const mul=/sac5$/.test(fk)?5:fk==='pdt_agria'?10:1;out.push({des:des+(mul>1&&pu!=null?` (PA du sac = ${String(pu).replace('.',',')} × ${mul} kg)`:''),ori:C2[cn]||'',pu:pu!=null?Math.round(pu*mul*100)/100:null,mt,ill:egg?'':k,e:fe,fl:!egg,act:{lab:!egg,pa:!egg&&!!fe}})}
   else{const g=genLine(l,sup);if(!g)continue;let e='',how='';const eg=g.ean?(P[g.ean]?g.ean:(P[g.ean.padStart(13,'0')]?g.ean.padStart(13,'0'):fixEan(g.ean))):'';
-   if(eg){e=eg;how='ean'}else if(g.ref&&REFMAP[sup+'|'+g.ref]&&P[REFMAP[sup+'|'+g.ref]]){e=REFMAP[sup+'|'+g.ref];how='ref'}else if(!g.ean){e=fuzzy(g.des,false);if(e)how='proche'}
-   const o=P[e];const fl=!!o&&isFL(o)&&sup==='AGRIFRESH';out.push({des:g.des,ref:g.ref,ori:'',pu:g.pu,mt:g.mt,ill:fl?autoIll(o.lib):'',e,how,raw:g.ean&&!eg?g.ean:'',fl,act:{lab:!!e&&how!=='proche',pa:false}})}}
+   if(eg){e=eg;how='ean'}else{const R=refDb(),sn=SN(sup);const hr=g.ref&&R.ref[sn+'|'+RN(g.ref)],hd=R.des[sn+'|'+TOK(g.des).join(' ')];if(hr){e=hr;how='ref';const st=w=>w.slice(0,5),A=new Set(TOK(g.des).filter(w=>!/\d/.test(w)).map(st));if(A.size&&!TOK(P[e].lib).some(w=>A.has(st(w))))how='refdiff'}else if(hd){e=hd;how='ref'}else if(!g.ean){e=fuzzy(g.des,false,sup);if(e)how='proche'}}
+   const o=P[e];const fl=!!o&&isFL(o)&&sup==='AGRIFRESH';out.push({des:g.des,ref:g.ref,ori:'',pu:g.pu,mt:g.mt,ill:fl?autoIll(o.lib):'',e,how,raw:g.ean&&!eg?g.ean:'',fl,act:{lab:!!e&&how!=='proche'&&how!=='refdiff',pa:false}})}}
  return {sup,date,lines:out}}
 let INV=null;
 function renderInv(){const box=$('#invRes');if(!INV){box.innerHTML='';return}const fl=INV.lines.filter(x=>x.fl).length;
- box.innerHTML=`<div class="card"><h2>${INV.sup} · facture du ${INV.date.split('-').reverse().join('/')} · ${INV.lines.length} lignes lues · ${INV.lines.filter(x=>P[x.e]).length} trouvées en caisse</h2><p class="mut">Vérifiez chaque ligne (une photo peut se tromper sur un chiffre). Les lignes « non trouvé » ou « à vérifier » : appuyez sur Scanner et scannez le produit, l'appli retiendra la référence fournisseur. Le prix d'achat lu n'est utilisé que si vous cochez « PA ».</p>
+ box.innerHTML=`<div class="card"><h2>${esc(INV.sup)} · facture du ${INV.date.split('-').reverse().join('/')} · ${INV.lines.length} lignes lues · ${INV.lines.filter(x=>P[x.e]).length} trouvées en caisse</h2><p class="mut">Vérifiez chaque ligne (une photo peut se tromper sur un chiffre). Les lignes « non trouvé » ou « à vérifier » : appuyez sur Scanner et scannez le produit, l'appli retiendra la référence fournisseur. Le prix d'achat lu n'est utilisé que si vous cochez « PA ».</p>
  <div id="invList">${INV.lines.map((x,i)=>{const o=P[x.e];return `<div class="iline" data-i="${i}"><div class="il1">${x.scan?'<span class="pill p-ok">scanné</span> ':''}${x.ref?`<span class="mut">${esc(x.ref)}</span> `:''}<b>${esc(x.des)}</b>${x.unk?` <span class="mut">${x.unk}</span>`:''}${x.ori?` <span class="pill p-ok">${esc(D.flags[x.ori]?D.flags[x.ori][1]:x.ori)}</span>`:''}</div>
- <div class="il2">${o?`→ ${esc(o.lib)} <span class="mut">${o.e}</span>${x.how==='proche'?' <b style="color:#c62828">à vérifier (nom proche)</b>':x.how==='ref'?' <span class="mut">(réf. connue)</span>':''}`:'<span class="pill p-b">non trouvé : scannez-le</span>'} ${!o&&x.fl?'<button class="b2 iNew">Créer la fiche F&L</button>':''}<input type="text" class="iSearch" placeholder="autre produit (nom ou code)" style="width:190px"></div>
+ <div class="il2">${o?`→ ${esc(o.lib)} <span class="mut">${o.e}</span>${x.how==='proche'?' <b style="color:#c62828">à vérifier (nom proche)</b>':x.how==='refdiff'?' <b style="color:#c62828">réf. connue mais nom différent : à vérifier</b>':x.how==='ref'?' <span class="mut">(réf. connue)</span>':''}`:'<span class="pill p-b">non trouvé : scannez-le</span>'} ${!o&&x.fl?'<button class="b2 iNew">Créer la fiche F&L</button>':''}${!o&&!x.fl?'<button class="b y iNewP">➕ Créer l\'article</button>':''}<input type="text" class="iSearch" placeholder="autre produit (nom ou code)" style="width:190px"></div>
  <div class="il3"><label>PA lu HT <input type="text" inputmode="decimal" class="iPa" value="${x.pu!=null?String(x.pu).replace('.',','):''}" style="width:70px"></label><span>PV actuel <b>${o&&o.prix!=null?fmt(o.prix)+' €':'–'}</b>${o&&o.prix!=null&&x.pu?` <span class="mut">(marge ${Math.round((1-x.pu/(o.prix/1.055))*100)} %)</span>`:''}</span><label>Nouveau PV <input type="text" inputmode="decimal" class="iPv" placeholder="TON PV" style="width:70px;background:#FFF9C4"></label><label><input type="checkbox" class="iLab" ${x.act.lab&&o?'checked':''}> étiquette</label><label><input type="checkbox" class="iPaC" ${x.act.pa&&o?'checked':''}> PA</label></div>${lineChecks(x).map(w=>`<div class="warnbox" style="margin:4px 0;padding:4px 8px">${esc(w)}</div>`).join('')}</div>`}).join('')}</div>
  <div class="row" style="margin-top:10px"><button class="b2 big" id="invScan">📷 Scanner les produits de la facture</button><button class="b2" id="invRep">Rapport de contrôle → Drive</button></div><div class="row" style="margin-top:10px"><button class="b y" id="invApply">Valider la facture</button><span class="mut">Ajoute les étiquettes à imprimer (gondole ou fruits et légumes), prépare l'import StorePOS (prix d'achat, nouveaux PV) et met à jour la saison des fruits et légumes (${fl} ligne(s) F&L).</span></div></div>`}
 function wireInv(){$('#invRes').addEventListener('change',e=>{const tr=e.target.closest('.iline');if(!tr||!INV)return;const x=INV.lines[+tr.dataset.i];if(e.target.classList.contains('iLab'))x.act.lab=e.target.checked;if(e.target.classList.contains('iPaC'))x.act.pa=e.target.checked;if(e.target.classList.contains('iPa'))x.pu=num(e.target.value);if(e.target.classList.contains('iPv'))x.pv=num(e.target.value);
  if(e.target.classList.contains('iSearch')){const v=e.target.value;const hit=fuzzy(v,false)||(P[eanStr(v)]?eanStr(v):'');if(hit){x.e=hit;x.how='manuel';x.act.lab=true;x.fl=isFL(P[hit])&&INV.sup==='AGRIFRESH';if(x.fl)x.ill=autoIll(P[hit].lib);renderInv()}else e.target.style.borderColor='#c62828'}});
- $('#invRes').addEventListener('click',e=>{if(!e.target.classList.contains('iNew'))return;const x=INV.lines[+e.target.closest('.iline').dataset.i];openNewFL({lib:x.des,ill:x.ill,pa:x.pu,ori:x.ori,line:x})});}
-function applyInv(){if(!INV)return;let nl=0,nf=0,np=0;for(const x of INV.lines){if(x.ref&&P[x.e]&&INV.sup!=='AUTRE')REFMAP[INV.sup+'|'+x.ref]=x.e;const o=P[x.e];if(x.ill&&x.fl&&(!HIST[x.ill]||HIST[x.ill]<INV.date))HIST[x.ill]=INV.date;if(!o)continue;
+ $('#invRes').addEventListener('click',e=>{if(e.target.classList.contains('iNewP')){const x=INV.lines[+e.target.closest('.iline').dataset.i];openNewProd({e:x.unk||x.raw||'',lib:x.des,sup:INV.sup,reff:x.ref,pa:x.pu,line:x});return}if(!e.target.classList.contains('iNew'))return;const x=INV.lines[+e.target.closest('.iline').dataset.i];openNewFL({lib:x.des,ill:x.ill,pa:x.pu,ori:x.ori,line:x})});}
+function applyInv(){if(!INV)return;let nl=0,nf=0,np=0;for(const x of INV.lines){if(x.ref&&P[x.e]&&INV.sup!=='AUTRE'){REFMAP[SN(INV.sup)+'|'+RN(x.ref)]=x.e;REFDB=null}const o=P[x.e];if(x.ill&&x.fl&&(!HIST[x.ill]||HIST[x.ill]<INV.date))HIST[x.ill]=INV.date;if(!o)continue;
   if(x.act.lab){if(x.fl){if(!SELF.includes(o.e))SELF.push(o.e);nf++;if(x.ori)setF(o.e,'ori',x.ori)}else{if(!SELG.includes(o.e))SELG.push(o.e);nl++}}
   if(x.act.pa&&x.pu!=null){CHG[o.e]=Object.assign(CHG[o.e]||{},{pa:x.pu,src:`${INV.sup} ${INV.date}`,date:today()});np++}
   if(x.pv!=null)setPrice(o.e,x.pv)}
@@ -507,6 +517,32 @@ function openNewFL(pre){const io=ILLOPTS(),oo=ORIOPTS();const k=pre.ill||autoIll
  $('#nfX').onclick=()=>$('#modal').style.display='none';$('#nfOk').onclick=()=>{const pv=num($('#nfPv').value),l=$('#nfLib').value.trim().toUpperCase();if(!l)return $('#nfErr').textContent='Libellé obligatoire.';if(pv==null)return $('#nfErr').textContent='Prix de vente obligatoire (jamais inventé).';
   const c=nextCode();const ill=$('#nfIll').value;NEWF[c]={lib:l,ill,ori:$('#nfOri').value,kg:$('#nfU').value==='kg',pa:num($('#nfPa').value),prix:pv,date:today()};P[c]={e:c,lib:l,prix:pv,dep:'FRUITS ET LEG. TAUX REDUIT',q:null,neuf:1,grp:'FRUIT ET LEGUME'};
   setF(c,'ill',ill);setF(c,'ori',NEWF[c].ori);setF(c,'unit',NEWF[c].kg?'le kg':'la pièce');if(!SELF.includes(c))SELF.push(c);if(pre.line){pre.line.e=c;pre.line.act.lab=true}HIST[ill]=HIST[ill]&&HIST[ill]>today()?HIST[ill]:(pre.line&&INV?INV.date:today());save();saveApp();updBadge();$('#modal').style.display='none';if(INV)renderInv();renderF()}}
+// ---------- création d'un article (épicerie, crèmerie, liquides…) ----------
+const validEan=c=>/^\d{8}$|^\d{13}$/.test(c)&&chk(c.padStart(13,'0'));
+function openNewProd(pre){const deps=Object.keys(DEPT).filter(d=>!/FRUITS ET LEG/.test(d)&&DEPT[d][1]!=null);const sup=pre.sup&&pre.sup!=='AUTRE'?supCanon(pre.sup):'';
+ $('#modal').innerHTML=`<div class="mbox"><h2>Créer un article</h2><p class="mut">La fiche part dans l'import StorePOS (création seulement, mode 3). Aucun code n'est deviné : ce qui manque bloque la ligne.</p>
+ <label>Code-barres<br><input type="text" id="npE" inputmode="numeric" value="${esc(pre.e||'')}" style="width:190px"> <button class="b2" id="npScan">📷 Scanner</button> <button class="b2" id="npGen">Code interne</button></label>
+ <label style="display:block;margin-top:8px">Libellé en caisse <span class="mut" id="npN"></span><br><input type="text" id="npL" maxlength="40" value="${esc(key(pre.lib||'').replace(/\s+/g,' ').trim().slice(0,40))}" style="width:100%"></label>
+ <div class="row" style="margin-top:8px"><label>Fournisseur<br><select id="npF"><option value="">— choisir —</option>${supOpts(sup)}</select></label><label>Réf. fournisseur<br><input type="text" id="npR" value="${esc(pre.reff||'')}" style="width:110px"></label></div>
+ <div class="row" style="margin-top:8px"><label>Département (fixe la TVA) <b>*</b><br><select id="npD"><option value="">— choisir —</option>${deps.map(d=>`<option>${d}</option>`).join('')}</select></label>
+ <label>Famille<br><select id="npFa">${Object.keys(MAP.fam).filter(f=>!/FRUITS/.test(f)).map(f=>`<option ${f==='CREATION CAISSE'?'selected':''}>${esc(f)}</option>`).join('')}</select></label>
+ <label>Rayon<br><select id="npRa"><option value="">—</option>${Object.keys(MAP.ray).map(f=>`<option>${esc(f)}</option>`).join('')}</select></label></div>
+ <div class="row" style="margin-top:8px"><label>Contenance<br><input type="text" id="npC" inputmode="decimal" placeholder="ex. 0,5" style="width:70px"></label><label>Unité<br><select id="npT"><option value="">—</option><option value="4">kg</option><option value="3">litre</option><option value="2">unité</option></select></label>
+ <label>Prix d'achat HT<br><input type="text" id="npPa" inputmode="decimal" value="${pre.pa!=null?String(pre.pa).replace('.',','):''}" style="width:80px"></label><label>Prix de vente TTC <b>*</b><br><input type="text" id="npPv" inputmode="decimal" style="width:80px;background:#FFF9C4"></label></div>
+ <div class="row" style="margin-top:12px"><button class="b y" id="npOk">Créer l'article</button><button class="b2" id="npX">Annuler</button><span id="npErr" style="color:#c62828;font-weight:700"></span></div></div>`;$('#modal').style.display='flex';
+ const cnt=()=>{const n=$('#npL').value.length;$('#npN').textContent=`${n} car.${n>19?' (la caisse en affiche 19)':''}`};$('#npL').oninput=cnt;cnt();
+ $('#npGen').onclick=()=>{$('#npE').value=nextCode()};$('#npX').onclick=()=>{$('#modal').style.display='none';if(pre.back)pre.back()};
+ $('#npScan').onclick=()=>{const keep=$('#modal').innerHTML;openScanner('Scanner le code-barres de l\'article',c=>{pre.e=c;return {ok:true,txt:c+' (fermez avec Terminer)'}},()=>openNewProd(Object.assign(pre,{e:pre.e,lib:$('#npL')?.value||pre.lib})))};
+ $('#npOk').onclick=()=>{const err=m=>$('#npErr').textContent=m;let e=eanStr($('#npE').value);if(e.length===12)e='0'+e;const lib=$('#npL').value.trim().toUpperCase();const pv=num($('#npPv').value),dep=$('#npD').value;
+  if(!e)return err('Code-barres obligatoire (scannez-le ou « Code interne »).');if(!validEan(e))return err('Code-barres invalide (clé de contrôle fausse).');if(P[e]&&!P[e].neuf)return err('Ce code existe déjà en caisse : '+P[e].lib);
+  if(!lib)return err('Libellé obligatoire.');if(!dep)return err('Choisissez le département.');if(pv==null)return err('Prix de vente obligatoire (jamais inventé).');
+  const f={kind:'epi',lib,four:$('#npF').value,reff:$('#npR').value.trim(),dep,fam:$('#npFa').value,ray:$('#npRa').value,cont:num($('#npC').value),ct:$('#npT').value,pa:num($('#npPa').value),prix:pv,date:today()};
+  NEWF[e]=f;P[e]={e,lib,prix:pv,prix0:pv,dep,four:f.four,reff:f.reff,fam:f.fam,ray:f.ray,q:null,neuf:1,pa0:f.pa};if(f.four&&f.reff){REFMAP[SN(f.four)+'|'+RN(f.reff)]=e;LS.set('cpb_refmap',REFMAP)}REFDB=null;TOKIDX=null;
+  if(!SELG.includes(e))SELG.push(e);if(pre.line){pre.line.e=e;pre.line.how='manuel';pre.line.act.lab=true;delete pre.line.unk}UNK=UNK.filter(u=>u.c!==e);LS.set('cpb_unk',UNK);
+  save();saveApp();updBadge();$('#modal').style.display='none';toast('Article créé : import StorePOS prêt + étiquette ajoutée');if(INV)renderInv();renderUnk();if(pre.back)pre.back()}}
+// ---------- produits inconnus scannés en gondole ----------
+let UNK=LS.get('cpb_unk',[]);
+function renderUnk(){const b=$('#gUnk');if(!b)return;b.innerHTML=UNK.length?`<div class="warnbox"><b>${UNK.length} produit(s) inconnu(s) en caisse</b>${UNK.map(u=>`<div class="row" style="margin-top:6px"><span style="min-width:130px">${u.c}</span><button class="b y uNew" data-c="${u.c}">➕ Créer l'article</button><button class="b2 uDel" data-c="${u.c}">retirer</button></div>`).join('')}</div>`:''}
 // ---------- saison (hors saison = pas acheté depuis 28 jours) ----------
 let SEUIL_J=28;
 function saisonRows(){return Object.values(P).filter(o=>isFL(o)&&!o.neuf).map(o=>{const k=autoIll(o.lib),d=HIST[k],g=key(CHG[o.e]?.groupe||o.grp||'');const age=days(d);
@@ -522,7 +558,10 @@ function importRows(){const rows=[],blk=[];
   
   const lib=c.nomCaisse||o.lib;const r=[e,(/^\d{13}$/.test(e)&&chk(e))?1:2,'',lib,d?d[0]:'',fam||'','','','',c.pa??o.pa0??'',c.prix??o.prix0??o.prix??'',d?d[1]:'','','',sf||'',ra||'','','','','',gr||'','','','',''];
   if(why.length)blk.push({e,lib,why});else rows.push(r)}
- for(const [e,f] of Object.entries(NEWF)){rows.push([e,3,'',f.lib,71,45,'',f.kg?1:'',f.kg?4:'',f.pa??'',f.prix,1,'','',FRUITS.has(f.ill)?63:64,1,'','','','',1,'',f.kg?1:0,f.ori?'Origine '+(D.flags[f.ori]?.[1]||f.ori):'',''])}
+ for(const [e,f] of Object.entries(NEWF)){if(f.kind==='epi'){const why=[];const d=DEPT[f.dep];if(!d||d[1]==null)why.push('département à choisir');const fam=lookup(MAP.fam,f.fam);if(fam===undefined)why.push(`code de la famille « ${f.fam} » inconnu`);const ra=f.ray?lookup(MAP.ray,f.ray):'';if(ra===undefined)why.push(`code du rayon « ${f.ray} » inconnu`);
+   const fc=f.four?lookup(MAP.four||{},f.four):'';if(why.length){blk.push({e,lib:f.lib,why});continue}
+   rows.push([e,3,f.reff||'',f.lib,d[0],fam||'','',f.cont??'',f.cont!=null&&f.ct?+f.ct:'',f.pa??'',f.prix,d[1],'',fc||'','',ra||'','','','','','','',0,(f.four&&!fc)?('Fournisseur a affecter : '+f.four):'','']);continue}
+  rows.push([e,3,'',f.lib,71,45,'',f.kg?1:'',f.kg?4:'',f.pa??'',f.prix,1,'','',FRUITS.has(f.ill)?63:64,1,'','','','',1,'',f.kg?1:0,f.ori?'Origine '+(D.flags[f.ori]?.[1]||f.ori):'',''])}
  return {rows,blk}}
 // xlsx minimal (zip non compressé)
 const CRC=(()=>{const t=new Uint32Array(256);for(let n=0;n<256;n++){let c=n;for(let k=0;k<8;k++)c=c&1?0xEDB88320^(c>>>1):c>>>1;t[n]=c>>>0}return b=>{let c=0xFFFFFFFF;for(let i=0;i<b.length;i++)c=t[(c^b[i])&255]^(c>>>8);return (c^0xFFFFFFFF)>>>0}})();
@@ -537,7 +576,7 @@ function xlsx(sheetName,rows){const x=s=>String(s).replace(/&/g,'&amp;').replace
   ['xl/_rels/workbook.xml.rels','<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/></Relationships>'],
   ['xl/worksheets/sheet1.xml',`<?xml version="1.0" encoding="UTF-8" standalone="yes"?><worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><sheetData>${sd}</sheetData></worksheet>`]])}
 function renderI(){const {rows,blk}=importRows();
- $('#iBody').innerHTML=rows.map(r=>`<tr><td>${r[0]}</td><td>${esc(r[3])}</td><td>${r[1]===3?'<span class="pill p-ok">création F&L</span>':''}${CHG[r[0]]?.prix!=null?'PV '+fmt(r[10])+' € ':''}${CHG[r[0]]?.pa!=null?'PA '+fmt(+r[9])+' € ':''}${CHG[r[0]]?.groupe?'groupe → '+esc(CHG[r[0]].groupe):''}</td><td><button class="b2 iDel" data-e="${r[0]}">retirer</button></td></tr>`).join('')||'<tr><td colspan="4" class="mut">Aucune modification en attente.</td></tr>';
+ $('#iBody').innerHTML=rows.map(r=>`<tr><td>${r[0]}</td><td>${esc(r[3])}</td><td>${r[1]===3?`<span class="pill p-ok">création ${NEWF[r[0]]?.kind==='epi'?'article':'F&L'}</span>`:''}${CHG[r[0]]?.prix!=null?'PV '+fmt(r[10])+' € ':''}${CHG[r[0]]?.pa!=null?'PA '+fmt(+r[9])+' € ':''}${CHG[r[0]]?.groupe?'groupe → '+esc(CHG[r[0]].groupe):''}</td><td><button class="b2 iDel" data-e="${r[0]}">retirer</button></td></tr>`).join('')||'<tr><td colspan="4" class="mut">Aucune modification en attente.</td></tr>';
  $('#iBlk').innerHTML=blk.length?`<div class="warnbox"><b>${blk.length} ligne(s) bloquée(s)</b> (jamais devinées) :<ul>${blk.map(b=>`<li>${esc(b.lib)} (${b.e}) : ${b.why.join(' ; ')}</li>`).join('')}</ul>Ajoutez le code manquant dans Réglages › Codes StorePOS, ou retirez la ligne.</div>`:'';
  $('#iDone').innerHTML=DONE.slice(-8).reverse().map(d=>`<li>${esc(d.name)} · ${d.n} ligne(s) · ${d.date}</li>`).join('')||'<li class="mut">aucun</li>';updBadge()}
 async function genImport(){const {rows}=importRows();if(!rows.length)return toast('Rien à importer.');const d=new Date(),st=`${String(d.getFullYear()).slice(2)}${String(d.getMonth()+1).padStart(2,'0')}${String(d.getDate()).padStart(2,'0')}-${String(d.getHours()).padStart(2,'0')}${String(d.getMinutes()).padStart(2,'0')}`;
@@ -580,8 +619,11 @@ async function driveSync(){const st=$('#gStat');try{st.textContent='Synchronisat
  if(!fp)fp=(await q1("name contains 'tous les produits'"))[0]||(await q1("name contains 'export_catalogue'")).find(f=>!/AGIDRA|METRO|AGRIFRESH|DCA|MONDIAL/i.test(f.name));
  if(!fv)fv=(await q1("name contains 'Vente'"))[0];if(!fp)throw new Error('aucun export produits StorePOS trouvé : déposez-le dans APPLI ETIQUETTES CORBEILLE › EXPORTS STOREPOS');
  for(const [f,k] of [[fp,'base'],[fv,'ventes']])if(f&&(!META[k]||META[k].driveTime!==f.modifiedTime)){const b=await (await gf(`https://www.googleapis.com/drive/v3/files/${f.id}?alt=media`)).blob();await loadFile(new File([b],f.name),k);META[k].driveTime=f.modifiedTime;LS.set('cpb_meta',META)}
+ try{const cj=await (await gf('https://www.googleapis.com/drive/v3/files?orderBy=modifiedTime desc&pageSize=3&fields=files(id,name,modifiedTime)&q='+encodeURIComponent("name contains 'Cascade EAN' and mimeType='application/vnd.google-apps.spreadsheet' and trashed=false"))).json();const cf=(cj.files||[])[0];
+  if(cf&&LS.get('cpb_cascT','')!==cf.modifiedTime){const rows=parseCsv(await (await gf(`https://www.googleapis.com/drive/v3/files/${cf.id}/export?mimeType=text/csv`)).text());const h=rows[0].map(x=>norm(x));const ie=h.indexOf('EAN'),is=h.indexOf('FOURNISSEUR'),ir=h.indexOf('REF'),id=h.findIndex(x=>x.startsWith('DESIGNATION'));
+   CASC=rows.slice(1).filter(r=>r[ie]&&r[is]).map(r=>[r[is],r[ir]||'',r[ie],id>=0?r[id]||'':'']);LS.set('cpb_casc',CASC);LS.set('cpb_cascT',cf.modifiedTime);REFDB=null}}catch(e){}
  const s=await gFind('reglages-appli.json',root);if(s){const r=await (await gf(`https://www.googleapis.com/drive/v3/files/${s.id}?alt=media`)).json();mergeSettings(r)}
- await driveUpload('reglages-appli.json',new Blob([JSON.stringify(allSettings())],{type:'application/json'}));applyChg();showSum();TOKIDX=null;baseWarn();st.textContent='Synchronisé le '+new Date().toLocaleString('fr-FR');LS.set('cpb_lastsync',Date.now())}catch(e){st.textContent='Drive : '+e.message}}
+ await driveUpload('reglages-appli.json',new Blob([JSON.stringify(allSettings())],{type:'application/json'}));applyChg();showSum();TOKIDX=null;REFDB=null;baseWarn();fillSup();st.textContent='Synchronisé le '+new Date().toLocaleString('fr-FR');LS.set('cpb_lastsync',Date.now())}catch(e){st.textContent='Drive : '+e.message}}
 function allSettings(){return {v:1,ref:REFMAP,names:SETN,fl:SETF,force:FORCE,hist:HIST,chg:CHG,newf:NEWF,done:DONE,map:MAP,seuil:+$('#seuil').value,at:Date.now()}}
 function mergeSettings(r){if(!r)return;REFMAP=Object.assign({},r.ref||{},REFMAP);LS.set('cpb_refmap',REFMAP);Object.assign(SETN,r.names||{},SETN);for(const [e,v] of Object.entries(r.fl||{}))SETF[e]=Object.assign({},v,SETF[e]||{});for(const [k,d] of Object.entries(r.hist||{}))if(!HIST[k]||d>HIST[k])HIST[k]=d;
  for(const [e,c] of Object.entries(r.chg||{}))if(!CHG[e]&&!DONE.some(x=>x.eans?.includes(e)))CHG[e]=c;for(const [e,f] of Object.entries(r.newf||{}))if(!NEWF[e]&&!P[e])NEWF[e]=f;const dn=new Set(DONE.map(d=>d.name));(r.done||[]).forEach(d=>{if(!dn.has(d.name))DONE.push(d)});save();saveApp()}
@@ -723,7 +765,7 @@ function openScanner(title,onCode,onDone){let last='',lastT=0,stream=null,stop=f
 // ---- rapprochement facture ↔ scans ----
 const SUPK={AGRIFRESH:'AGRIFRESH',METRO:'METRO',PROMOCASH:'PROMOCASH',AGIDRA:'AGIDRA'};
 function lineChecks(x){const o=P[x.e];const w=[];if(!o||!INV)return w;
- const sup=SUPK[INV.sup];if(sup&&!x.fl){if(!o.four)w.push(`fournisseur manquant en caisse (facture ${sup})`);else if(key(o.four)!==sup)w.push(`fournisseur en caisse : ${o.four} (facture ${sup})`)}
+ const sup=INV.sup!=='AUTRE'?INV.sup:'';if(sup&&!x.fl){if(!o.four)w.push(`fournisseur manquant en caisse (facture ${sup})`);else if(!sameSup(o.four,sup))w.push(`fournisseur en caisse : ${o.four} (facture ${sup})`)}
  if(x.pu!=null&&o.pa0!=null&&o.pa0>0){const d=(x.pu-o.pa0)/o.pa0;if(Math.abs(d)>0.05)w.push(`PA en caisse ${fmt(o.pa0)} € ≠ facture ${fmt(x.pu)} € (${d>0?'+':''}${Math.round(d*100)} %)`)}else if(x.pu!=null&&!o.pa0)w.push('pas de prix d\'achat en caisse');
  if(o.prix!=null&&x.pu!=null){const tva=/TAUX NORMAL/.test(key(o.dep))?1.2:/INTERM/.test(key(o.dep))?1.1:1.055;const m=1-x.pu/(o.prix/tva);if(m<0.25)w.push(`marge ${Math.round(m*100)} % (< 25 %)`);if(o.prix/tva>x.pu*3)w.push('PV plus de 3 fois le PA : colis ou lot ? vérifier que c\'est la bonne fiche (unité)')}return w}
 function invScan(){if(!INV)return;openScanner('Scanner les produits de la facture',c=>{let e=P[c]?c:(P[c.padStart(13,'0')]?c.padStart(13,'0'):'');
@@ -737,10 +779,10 @@ function controlReport(){if(!INV)return null;const rows=[['Fournisseur','Date fa
 
 // --- câblage des nouveaux écrans ---
 async function runOcr(files){INV=null;let txt='';const pr=$('#invProg');try{for(let i=0;i<files.length;i++){pr.textContent=`Lecture de la photo ${i+1}/${files.length}… (la première fois, préparation du moteur : 10-20 s)`;txt+='\n'+await ocrImage(files[i],p=>pr.textContent=`Lecture de la photo ${i+1}/${files.length} : ${p} %`)}
- pr.textContent='';$('#invTxt').value=txt.trim();INV=parseInvoice(txt);if(!INV.lines.length){pr.textContent='Aucune ligne de produit reconnue : reprenez la photo plus nette, ou ouvrez « Coller le texte » pour corriger.';$('#invTxtBox').style.display='block'}renderInv()}catch(e){pr.textContent='Erreur : '+e.message}}
+ pr.textContent='';$('#invTxt').value=txt.trim();INV=parseInvoice(txt,$('#invSup').value);if(!INV.lines.length){pr.textContent='Aucune ligne de produit reconnue : reprenez la photo plus nette, ou ouvrez « Coller le texte » pour corriger.';$('#invTxtBox').style.display='block'}renderInv()}catch(e){pr.textContent='Erreur : '+e.message}}
 async function runPdf(files){INV=null;const pr=$('#invProg');try{let txt='',imgs=[];for(const f of files){if(/pdf/i.test(f.type)||/\.pdf$/i.test(f.name)){pr.textContent='Lecture du PDF…';const r=await pdfRead(f);txt+='\n'+r.text;imgs.push(...r.imgs)}else imgs.push(f)}
  for(let i=0;i<imgs.length;i++){pr.textContent=`Page scannée ${i+1}/${imgs.length} : lecture optique…`;txt+='\n'+await ocrImage(imgs[i],p=>pr.textContent=`Page scannée ${i+1}/${imgs.length} : ${p} %`)}
- pr.textContent='';$('#invTxt').value=txt.trim();INV=parseInvoice(txt);if(!INV.lines.length){pr.textContent='Aucune ligne de produit reconnue dans ce document. Envoyez-le à Claude pour adapter la lecture à ce fournisseur.';$('#invTxtBox').style.display='block'}renderInv()}catch(e){pr.textContent='Erreur : '+e.message}}
+ pr.textContent='';$('#invTxt').value=txt.trim();INV=parseInvoice(txt,$('#invSup').value);if(!INV.lines.length){pr.textContent='Aucune ligne de produit reconnue dans ce document. Envoyez-le à Claude pour adapter la lecture à ce fournisseur.';$('#invTxtBox').style.display='block'}renderInv()}catch(e){pr.textContent='Erreur : '+e.message}}
 $('#invPdf').onchange=e=>{if(e.target.files.length)runPdf([...e.target.files]);e.target.value=''};
 $('#invDrive').onclick=async()=>{const pr=$('#invProg');try{pr.textContent='Recherche des factures sur le Drive…';const j=await (await gf('https://www.googleapis.com/drive/v3/files?orderBy=modifiedTime desc&pageSize=40&fields=files(id,name,modifiedTime)&q='+encodeURIComponent("mimeType='application/pdf' and trashed=false"))).json();pr.textContent='';
  const fs=(j.files||[]).sort((a,b)=>(/FACT/i.test(b.name)-/FACT/i.test(a.name))||(b.modifiedTime>a.modifiedTime?1:-1)).slice(0,25);
@@ -757,7 +799,9 @@ async function boot(){const r=gReturn();const online=navigator.onLine;const vali
  if(!LS.get('cpb_everConn',0)||LS.get('cpb_needLogin',0)){if(Date.now()-LS.get('cpb_skipT',0)>12*3600*1000||!Object.keys(P).length)$('#welcome').style.display='block'}}
 document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible'&&navigator.onLine&&TOKEN&&Date.now()<TOKEXP&&Date.now()-LS.get('cpb_lastsync',0)>15*60*1000)driveSync()});
 $('#invPhoto').onchange=e=>{if(e.target.files.length)runOcr([...e.target.files]);e.target.value=''};$('#invPick').onchange=e=>{if(e.target.files.length)runOcr([...e.target.files]);e.target.value=''};
-$('#invTxtB').onclick=()=>{$('#invTxtBox').style.display=$('#invTxtBox').style.display==='none'?'block':'none'};$('#invParse').onclick=()=>{INV=parseInvoice($('#invTxt').value);renderInv()};
+$('#invTxtB').onclick=()=>{$('#invTxtBox').style.display=$('#invTxtBox').style.display==='none'?'block':'none'};$('#invParse').onclick=()=>{INV=parseInvoice($('#invTxt').value,$('#invSup').value);renderInv()};
+function fillSup(){const v=$('#invSup').value;$('#invSup').innerHTML=supOpts(v,'Détection automatique');$('#gSup').innerHTML=supOpts($('#gSup').value,'Tous les fournisseurs')}
+$('#invSup').onchange=()=>{if(INV&&$('#invTxt').value){INV=parseInvoice($('#invTxt').value,$('#invSup').value);renderInv()}};
 wireInv();$('#invRes').addEventListener('click',e=>{if(e.target.id==='invApply')applyInv()});
 $('#fNew').onclick=()=>openNewFL({lib:'',ill:'',pa:null,ori:''});
 $('#sBody').addEventListener('change',e=>{if(!e.target.classList.contains('sC'))return;const ea=e.target.closest('tr').dataset.e;if(e.target.checked)CHG[ea]=Object.assign(CHG[ea]||{},{groupe:e.target.dataset.g,date:today()});else if(CHG[ea]){delete CHG[ea].groupe;if(!Object.keys(CHG[ea]).filter(k=>!['src','date'].includes(k)).length)delete CHG[ea]}saveApp();updBadge()});
@@ -767,16 +811,18 @@ $('#iGen').onclick=genImport;
 $('#invRes').addEventListener('click',e=>{if(e.target.id==='invScan')invScan();if(e.target.id==='invRep'){const r=controlReport();if(!r)return toast('Aucune anomalie détectée.');fileReady(`CONTROLE-FACTURE-${INV.sup}-${INV.date}.xlsx`,xlsx('CONTROLE',r),'CONTROLES FACTURES',`Contrôle facture ${INV.sup} du ${INV.date.split('-').reverse().join('/')} : ${r.length-1} anomalie(s)`)}});
 async function doPdf(kind,btn){const t0=btn.textContent;btn.disabled=true;btn.textContent='Création du PDF…';try{const r=await makePdf(kind);fileReady(r.name,r.blob,'PLANCHES A IMPRIMER',`${r.name} (${r.n} page(s)) à imprimer à 100 %`)}catch(e){toast(e.message)}btn.disabled=false;btn.textContent=t0}
 $('#gPdf').onclick=e=>doPdf('g',e.target);$('#fPdf').onclick=e=>doPdf('f',e.target);
-$('#gScan').onclick=()=>openScanner('Scanner les produits à étiqueter',c=>{let e=P[c]?c:(P[c.padStart(13,'0')]?c.padStart(13,'0'):'');if(!e)return {ok:false,txt:`${c} : inconnu en caisse`};if(!SELG.includes(e))SELG.push(e);save();return {ok:true,txt:`✔ ${P[e].lib}${P[e].prix==null?' (sans prix)':''}`}},()=>{$('#gSelOnly').checked=true;renderG()});
+$('#gScan').onclick=()=>openScanner('Scanner les produits à étiqueter',c=>{let e=P[c]?c:(P[c.padStart(13,'0')]?c.padStart(13,'0'):'');if(!e){if(!UNK.some(u=>u.c===c)){UNK.push({c,d:today()});LS.set('cpb_unk',UNK)}return {ok:false,txt:`${c} : inconnu en caisse → à créer`}}if(SELG.includes(e))return {ok:true,txt:`déjà dans la liste : ${P[e].lib} (1 seule étiquette)`};SELG.push(e);save();return {ok:true,txt:`✔ ${P[e].lib}${P[e].prix==null?' (sans prix)':''}`}},()=>{$('#gSelOnly').checked=true;renderG();renderUnk()});
+$('#gSup').onchange=()=>renderG();
+document.addEventListener('click',e=>{if(e.target.classList.contains('uNew'))openNewProd({e:e.target.dataset.c,lib:'',sup:$('#gSup').value,back:()=>renderG()});if(e.target.classList.contains('uDel')){UNK=UNK.filter(u=>u.c!==e.target.dataset.c);LS.set('cpb_unk',UNK);renderUnk()}});
 const mapTxt=o=>Object.entries(o).map(([k,v])=>`${k} = ${v}`).join('\n');const txtMap=s=>Object.fromEntries(s.split('\n').map(l=>l.split('=')).filter(a=>a.length===2&&a[0].trim()&&a[1].trim()).map(([k,v])=>[k.trim(),+v.trim()||v.trim()]));
-function showMap(){$('#mFam').value=mapTxt(MAP.fam);$('#mSfam').value=mapTxt(MAP.sfam);$('#mGrp').value=mapTxt(MAP.grp);$('#mRay').value=mapTxt(MAP.ray)}showMap();
-$('#mSave').onclick=()=>{MAP={fam:txtMap($('#mFam').value),sfam:txtMap($('#mSfam').value),grp:txtMap($('#mGrp').value),ray:txtMap($('#mRay').value)};saveApp();toast('Codes enregistrés')};
+function showMap(){$('#mFam').value=mapTxt(MAP.fam);$('#mSfam').value=mapTxt(MAP.sfam);$('#mGrp').value=mapTxt(MAP.grp);$('#mRay').value=mapTxt(MAP.ray);$('#mFour').value=mapTxt(MAP.four||{})}showMap();
+$('#mSave').onclick=()=>{MAP={fam:txtMap($('#mFam').value),sfam:txtMap($('#mSfam').value),grp:txtMap($('#mGrp').value),ray:txtMap($('#mRay').value),four:txtMap($('#mFour').value)};saveApp();toast('Codes enregistrés')};
 $('#gCid').value=LS.get('cpb_cid','')||window.CPB_CLIENT_ID||'';$('#gCid').onchange=()=>LS.set('cpb_cid',$('#gCid').value.trim());
 $('#gConn').onclick=()=>{LS.set('cpb_cid',$('#gCid').value.trim());try{gAuth(false)}catch(e){$('#gStat').textContent='Google : '+e.message}};$('#gSync').onclick=()=>driveSync();
 const _exp=$('#expSet').onclick;$('#expSet').onclick=()=>dl('reglages-etiquettes-corbeille.json',new Blob([JSON.stringify(allSettings(),null,1)],{type:'application/json'}));
 $('#setIn').onchange=async e=>{const f=e.target.files[0];if(!f)return;try{const j=JSON.parse(await f.text());mergeSettings(j);if(j.map)MAP=j.map;showMap();$('#stSet').textContent='Réglages importés.'}catch(x){$('#stSet').textContent='Fichier illisible.'}};
 if('serviceWorker' in navigator&&(location.protocol==='https:'||location.hostname==='localhost'))navigator.serviceWorker.register('sw.js').catch(()=>{});
-applyChg();updBadge();showSum();baseWarn();boot();
+applyChg();updBadge();showSum();baseWarn();fillSup();renderUnk();boot();
 </script>
 </body>
 </html>
