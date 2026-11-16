@@ -71,6 +71,7 @@ nav button{white-space:nowrap}
     <button data-t="t5" class="on">Facture</button>
     <button data-t="t8">Produit</button>
     <button data-t="t2">Gondole</button>
+    <button data-t="t9">Inventaire</button>
     <button data-t="t3">Fruits &amp; légumes</button>
     <button data-t="t7">Saison</button>
     <button data-t="t6">Import StorePOS<span class="impBadge"></span></button>
@@ -204,10 +205,20 @@ nav button{white-space:nowrap}
 <!-- ================= 4. AIDE ================= -->
 <section id="t8">
   <div class="card"><h2>Fiche produit et ventes moyennes</h2><p class="mut">Aide à l'achat : scannez un produit (ou photo de l'emballage, ou recherche) pour voir ses ventes moyennes, son prix d'achat et sa marge.</p>
-  <div class="row"><button class="b y big" id="pScan">📷 Scanner un produit</button><label class="b2" style="cursor:pointer">🖼 Photo du produit<input type="file" id="pPhoto" accept="image/*" capture="environment" style="display:none"></label></div>
+  <div class="row"><button class="b y big" id="pScan">📷 Scanner un produit</button><label class="b2" style="cursor:pointer">🖼 Photo (appareil ou pellicule)<input type="file" id="pPhoto" accept="image/*" style="display:none"></label><button class="b2" id="pPaste">📋 Coller une image</button></div>
+  <div id="pPasteZone" contenteditable="true" style="display:none;margin-top:8px;border:2px dashed #999;border-radius:10px;padding:14px;min-height:48px;color:#777">Touchez ici puis « Coller » (image copiée depuis WhatsApp, Photos…)</div>
   <div class="row" style="margin-top:8px"><input type="text" id="pq" placeholder="ou rechercher : nom, code-barres, réf. fournisseur" style="flex:1;font-size:16px"></div>
   <div id="pMsg" class="mut" style="margin-top:6px"></div><div id="pList"></div></div>
   <div id="pCard"></div>
+</section>
+<section id="t9">
+  <div class="card"><h2>Inventaire partiel</h2><p class="mut">Un comptage par zone (rayon, frigo…). Le fichier produit (code-barres | quantité) s'intègre dans StorePOS en <b>clôture partielle</b> : seuls les produits comptés sont mis à jour. À faire magasin fermé, sans vente entre le comptage et la clôture.</p>
+  <div class="row"><label>Zone comptée<br><input type="text" id="vZone" placeholder="ex. RAYON 4 EPICES" style="width:220px"></label><label>Quantité par scan<br><input type="text" id="vStep" inputmode="numeric" value="1" style="width:60px"></label></div>
+  <div class="row" style="margin-top:8px"><button class="b y big" id="vScan">📷 Compter (scanner)</button><button class="b2" id="vNew">Nouvelle zone</button></div>
+  <p class="mut">Chaque scan ajoute la quantité indiquée. Pour recompter le même produit à la caméra, sortez-le du cadre puis revenez. Les quantités se corrigent dans la liste.</p>
+  <div id="vSum" style="font-weight:700;margin:6px 0"></div>
+  <div class="tw"><table><thead><tr><th>Produit</th><th>Qté</th><th></th></tr></thead><tbody id="vBody"></tbody></table></div>
+  <div class="row" style="margin-top:10px"><button class="b y" id="vGen">Créer le fichier d'inventaire</button><span class="mut">Enregistré sur Drive dans INVENTAIRES. StorePOS : Stock › Inventaire › import Excel (A = code-barres, B = quantité) › clôture <b>partielle</b>.</span></div></div>
 </section>
 <section id="t4">
   <div class="card help">
@@ -247,7 +258,7 @@ const $=s=>document.querySelector(s);
 const esc=s=>String(s??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 function save(){LS.set('cpb_names',SETN);LS.set('cpb_fl',SETF);LS.set('cpb_selg',SELG);LS.set('cpb_self',SELF);LS.set('cpb_force',FORCE)}
 // ---------- onglets ----------
-document.querySelectorAll('nav button').forEach(b=>b.onclick=()=>{document.querySelectorAll('nav button').forEach(x=>x.classList.toggle('on',x===b));document.querySelectorAll('section').forEach(s=>s.classList.toggle('on',s.id===b.dataset.t));if(b.dataset.t==='t2')renderG();if(b.dataset.t==='t3')renderF();if(b.dataset.t==='t7')renderS();if(b.dataset.t==='t6')renderI();if(b.dataset.t==='t8')pPer();window.scrollTo(0,0)});
+document.querySelectorAll('nav button').forEach(b=>b.onclick=()=>{document.querySelectorAll('nav button').forEach(x=>x.classList.toggle('on',x===b));document.querySelectorAll('section').forEach(s=>s.classList.toggle('on',s.id===b.dataset.t));if(b.dataset.t==='t2')renderG();if(b.dataset.t==='t3')renderF();if(b.dataset.t==='t7')renderS();if(b.dataset.t==='t6')renderI();if(b.dataset.t==='t8')pPer();if(b.dataset.t==='t9')renderV();window.scrollTo(0,0)});
 // ---------- lecture xlsx (zip + xml) ----------
 async function inflate(buf){const ds=new DecompressionStream('deflate-raw');const s=new Blob([buf]).stream().pipeThrough(ds);return new Uint8Array(await new Response(s).arrayBuffer())}
 async function unzip(ab){const u=new Uint8Array(ab),dv=new DataView(ab);let e=u.length-22;while(e>=0&&dv.getUint32(e,true)!==0x06054b50)e--;if(e<0)throw new Error('zip');
@@ -427,7 +438,7 @@ let HIST=Object.assign({},H0,LS.get('cpb_hist',{})); // clé illustration -> AAA
 let CHG=LS.get('cpb_chg',{});      // ean -> {prix, pa, nomCaisse, groupe, src, date}
 let NEWF=LS.get('cpb_newf',{});    // ean -> fiche F&L à créer
 let DONE=LS.get('cpb_done',[]);    // imports générés
-let MAP=Object.assign({fam:{'CREATION CAISSE':9999,'FRUITS,LEGUMES FLEURS,PLANTES':45},sfam:{'FRUITS ET LEGUMES (HISTO)':62,'FRUITS FRAIS':63,'LEGUMES':64,'OEUFS':58},grp:{'FRUIT ET LEGUME':1,'HORS SAISON':5,'BOULANGERIE':6,'DIVERS':7},ray:{'ZONE CAISSE':1,'FRIGO CAISSE':2,'FRIGO BOISSON':3}},LS.get('cpb_map',{}));
+let MAP=Object.assign({four:{'AGRIFRESH':1,'GLOBALFOOD':2,'METRO':3,'PROMOCASH':4,'MONDIAL DISTRIBUTION':5,'DENIZ':6,'AGIDRA':7,'CASH-GROS':8,'TRADCOFRANCE':9,'DCA DISTRIBUTION':10,'MY AMERICAN MARKET':11,'SANNATI IMPEX':12,'HAUDECOEUR':13,'MONTPERAL':14,'AZ DISTRIBUTION':15,'EURO INTER FOOD SAS':16,'CENTRAL CASH VOLAILLES FRANCAISE AVS':17,'INTERAL':18,'SARL Y A':19,'COULEURS PRIMEURS':20},fam:{'CREATION CAISSE':9999,'FRUITS,LEGUMES FLEURS,PLANTES':45},sfam:{'FRUITS ET LEGUMES (HISTO)':62,'FRUITS FRAIS':63,'LEGUMES':64,'OEUFS':58},grp:{'FRUIT ET LEGUME':1,'HORS SAISON':5,'BOULANGERIE':6,'DIVERS':7},ray:{'ZONE CAISSE':1,'FRIGO CAISSE':2,'FRIGO BOISSON':3}},LS.get('cpb_map',{}));if(!MAP.four||!Object.keys(MAP.four).length)MAP.four={'AGRIFRESH':1,'GLOBALFOOD':2,'METRO':3,'PROMOCASH':4,'MONDIAL DISTRIBUTION':5,'DENIZ':6,'AGIDRA':7,'CASH-GROS':8,'TRADCOFRANCE':9,'DCA DISTRIBUTION':10,'MY AMERICAN MARKET':11,'SANNATI IMPEX':12,'HAUDECOEUR':13,'MONTPERAL':14,'AZ DISTRIBUTION':15,'EURO INTER FOOD SAS':16,'CENTRAL CASH VOLAILLES FRANCAISE AVS':17,'INTERAL':18,'SARL Y A':19,'COULEURS PRIMEURS':20};
 function saveApp(){LS.set('cpb_hist',HIST);LS.set('cpb_chg',CHG);LS.set('cpb_newf',NEWF);LS.set('cpb_done',DONE);LS.set('cpb_map',MAP);queueSync()}
 const DEPT={'DIVERS 5,5 %':[1,1],'DIVERS 20 %':[2,2],'DIVERS EXO':[3,null],'DIVERS 10 %':[7,5],'EPICERIE TAUX REDUIT':[11,1],'EPICERIE TAUX NORMAL':[12,2],'EPIC. ART. LOCAUX TAUX REDUIT':[13,1],'EPIC. ART. LOCAUX TAUX NORMAL':[14,2],'EPICERIE TAUX INTERM.':[15,5],'FRUITS ET LEG. TAUX INTERM':[19,5],'LIQUIDES TAUX REDUIT':[21,1],'LIQUIDES TAUX NORMAL':[22,2],'LIQ. ART. LOCAUX TAUX REDUIT':[23,1],'LIQ. ART. LOCAUX TAUX NORMAL':[24,2],'LIQUIDES TAUX INTERM.':[26,5],'BAZAR TAUX INTERM.':[29,5],'BAZAR TAUX REDUIT':[30,1],'DPH TAUX REDUIT':[31,1],'DPH TAUX NORMAL':[32,2],'BAZAR TAUX NORMAL':[34,2],'DPH ART LOCAUX TAUX REDUIT':[37,1],'DPH ART LOCAUX TAUX NORMAL':[38,2],'CREMERIE LS TAUX REDUIT':[41,1],'CREMERIE LS TAUX NORMAL':[42,2],'FROMAGE COUPE TAUX REDUIT':[43,1],'BOUCHERIE TAUX REDUIT':[51,1],'CHARCUT. TRAD. TAUX REDUIT':[53,1],'CHARCUT. LS TAUX REDUIT':[55,1],'VOLAILLES LS TAUX REDUIT':[57,1],'BOULANGERIE TAUX REDUIT':[65,1],'FRUITS ET LEG. TAUX REDUIT':[71,1]};
 const key=s=>String(s||'').toUpperCase().normalize('NFD').replace(/[̀-ͯ]/g,'').replace(/\s+/g,' ').trim();
@@ -463,7 +474,7 @@ const SN=s=>key(s||'').replace(/[^A-Z0-9]/g,''),RN=r=>String(r||'').toUpperCase(
 let CASC=LS.get('cpb_casc',[]),REFDB=null;   // CASC : [fournisseur, réf, EAN, désignation] (feuille « Cascade EAN » du Drive)
 function refDb(){if(REFDB)return REFDB;REFDB={ref:{},des:{}};const put=(s,r,e,d)=>{e=eanStr(e);if(!e)return;if(!P[e]&&P[e.padStart(13,'0')])e=e.padStart(13,'0');if(!P[e])return;const sn=SN(s);if(!sn)return;if(r)REFDB.ref[sn+'|'+RN(r)]=e;if(d){const k=TOK(d).join(' ');if(k)REFDB.des[sn+'|'+k]=e}};
  for(const o of Object.values(P))if(o.reff&&o.four)put(o.four,o.reff,o.e);for(const [s,r,e,d] of CASC)put(s,r,e,d);for(const [k,e] of Object.entries(REFMAP)){const i=k.indexOf('|');put(k.slice(0,i),k.slice(i+1),e)}return REFDB}
-function supList(){const s=new Map();const add=n=>{n=String(n||'').trim();if(n&&n!=='nan'&&!s.has(SN(n)))s.set(SN(n),n)};['AGRIFRESH','METRO','PROMOCASH','AGIDRA','MONDIAL DISTRIBUTION','DCA DISTRIBUTION','GLOBAL FOOD','AZ DISTRIBUTION','TRADCO FRANCE','SANNATI IMPEX'].forEach(add);CASC.forEach(r=>add(r[0]));Object.values(P).forEach(o=>add(o.four));return [...s.values()].sort()}
+function supList(){const s=new Map();const add=n=>{n=String(n||'').trim();if(n&&n!=='nan'&&!s.has(SN(n)))s.set(SN(n),n)};Object.keys(MAP.four||{}).forEach(add);CASC.forEach(r=>add(r[0]));Object.values(P).forEach(o=>add(o.four));return [...s.values()].sort()}
 const sameSup=(a,b)=>{a=SN(a);b=SN(b);return !!a&&!!b&&(a===b||a.startsWith(b)||b.startsWith(a))};
 function supCanon(d){const n=SN(d);if(!n||n==='AUTRE')return 'AUTRE';const l=supList();return l.find(x=>SN(x)===n)||l.find(x=>sameSup(x,d))||l.find(x=>SN(x).includes(n))||d}
 function supOpts(sel,first){return (first?`<option value="">${first}</option>`:'')+supList().map(s=>`<option ${sameSup(s,sel)?'selected':''}>${esc(s)}</option>`).join('')}
@@ -569,6 +580,13 @@ function pSearch(v){v=String(v||'').trim();if(!v){$('#pList').innerHTML='';retur
  if(!hits.length){const R=refDb();const toks=TOK(v);const sc={};const idx=TOKIDX||tokIndex();for(const w of toks)for(const e of (idx[w]||[]))sc[e]=(sc[e]||0)+1;hits.push(...Object.entries(sc).sort((a,b)=>b[1]-a[1]).slice(0,8).map(x=>x[0]))}
  pList(hits);if(hits.length===1)showProd(hits[0])}
 function pScanGo(){openScanner('Scanner un produit',c=>{const e=P[c]?c:P[c.padStart(13,'0')]?c.padStart(13,'0'):'';setTimeout(()=>{$('#scEnd').click();showProd(e||c)},150);return {ok:!!e,txt:e?P[e].lib:c+' : inconnu'}})}
+// ---------- inventaire partiel ----------
+let INVZ=LS.get('cpb_inv',{zone:'',items:{},order:[]});
+function saveV(){INVZ.zone=$('#vZone').value.trim();LS.set('cpb_inv',INVZ)}
+function renderV(){$('#vZone').value=INVZ.zone||'';const ks=INVZ.order.filter(c=>INVZ.items[c]!=null);let tot=0,unk=0;
+ $('#vBody').innerHTML=ks.map(c=>{const o=P[c];tot+=INVZ.items[c];if(!o)unk++;return `<tr data-c="${c}"><td>${o?esc(o.lib):'<span class="pill p-b">inconnu en caisse</span>'}<div class="mut">${c}</div></td><td><input type="text" inputmode="decimal" class="vQ" value="${String(INVZ.items[c]).replace('.',',')}" style="width:64px"></td><td><button class="b2 vDel">✕</button></td></tr>`}).join('')||'<tr><td colspan="3" class="mut">Rien de compté.</td></tr>';
+ $('#vSum').textContent=ks.length?`${ks.length} produit(s) · ${tot.toLocaleString('fr-FR')} article(s)${unk?` · ${unk} inconnu(s) : à créer avant la clôture`:''}`:''}
+function vAdd(c,n){if(!INVZ.items[c]&&INVZ.items[c]!==0)INVZ.order.unshift(c);else{INVZ.order=INVZ.order.filter(x=>x!==c);INVZ.order.unshift(c)}INVZ.items[c]=Math.round(((INVZ.items[c]||0)+n)*1000)/1000;saveV()}
 // ---------- saison (hors saison = pas acheté depuis 28 jours) ----------
 let SEUIL_J=28;
 function saisonRows(){return Object.values(P).filter(o=>isFL(o)&&!o.neuf).map(o=>{const k=autoIll(o.lib),d=HIST[k],g=key(CHG[o.e]?.groupe||o.grp||'');const age=days(d);
@@ -585,7 +603,7 @@ function importRows(){const rows=[],blk=[];
   const lib=c.nomCaisse||o.lib;const r=[e,(/^\d{13}$/.test(e)&&chk(e))?1:2,'',lib,d?d[0]:'',fam||'','','','',c.pa??o.pa0??'',c.prix??o.prix0??o.prix??'',d?d[1]:'','','',sf||'',ra||'','','','','',gr||'','','','',''];
   if(why.length)blk.push({e,lib,why});else rows.push(r)}
  for(const [e,f] of Object.entries(NEWF)){if(f.kind==='epi'){const why=[];const d=DEPT[f.dep];if(!d||d[1]==null)why.push('département à choisir');const fam=lookup(MAP.fam,f.fam);if(fam===undefined)why.push(`code de la famille « ${f.fam} » inconnu`);const ra=f.ray?lookup(MAP.ray,f.ray):'';if(ra===undefined)why.push(`code du rayon « ${f.ray} » inconnu`);
-   const fc=f.four?lookup(MAP.four||{},f.four):'';if(why.length){blk.push({e,lib:f.lib,why});continue}
+   const fc=f.four?(Object.entries(MAP.four||{}).find(([n])=>sameSup(n,f.four))||[])[1]:'';if(why.length){blk.push({e,lib:f.lib,why});continue}
    rows.push([e,3,f.reff||'',f.lib,d[0],fam||'','',f.cont??'',f.cont!=null&&f.ct?+f.ct:'',f.pa??'',f.prix,d[1],'',fc||'','',ra||'','','','','','','',0,(f.four&&!fc)?('Fournisseur a affecter : '+f.four):'','']);continue}
   rows.push([e,3,'',f.lib,71,45,'',f.kg?1:'',f.kg?4:'',f.pa??'',f.prix,1,'','',FRUITS.has(f.ill)?63:64,1,'','','','',1,'',f.kg?1:0,f.ori?'Origine '+(D.flags[f.ori]?.[1]||f.ori):'',''])}
  return {rows,blk}}
@@ -595,7 +613,7 @@ function zipStore(files){const te=new TextEncoder();let parts=[],cd=[],off=0;for
   parts.push(new Uint8Array(h.buffer),n,d);const c=new DataView(new ArrayBuffer(46));c.setUint32(0,0x02014b50,true);c.setUint16(4,20,true);c.setUint16(6,20,true);c.setUint32(16,crc,true);c.setUint32(20,d.length,true);c.setUint32(24,d.length,true);c.setUint16(28,n.length,true);c.setUint32(42,off,true);cd.push(new Uint8Array(c.buffer),n);off+=30+n.length+d.length}
  const cdl=cd.reduce((a,b)=>a+b.length,0);const e=new DataView(new ArrayBuffer(22));e.setUint32(0,0x06054b50,true);e.setUint16(8,files.length,true);e.setUint16(10,files.length,true);e.setUint32(12,cdl,true);e.setUint32(16,off,true);return new Blob([...parts,...cd,new Uint8Array(e.buffer)],{type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'})}
 function xlsx(sheetName,rows){const x=s=>String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');const col=i=>{let s='';i++;while(i){const m=(i-1)%26;s=String.fromCharCode(65+m)+s;i=Math.floor((i-1)/26)}return s};
- const sd=rows.map((r,ri)=>`<row r="${ri+1}">${r.map((v,ci)=>{if(v===''||v==null)return '';const ref=col(ci)+(ri+1);return (typeof v==='number')?`<c r="${ref}"><v>${v}</v></c>`:(ci===0&&/^\d+$/.test(v)?`<c r="${ref}"><v>${v}</v></c>`:`<c r="${ref}" t="inlineStr"><is><t>${x(v)}</t></is></c>`)}).join('')}</row>`).join('');
+ const sd=rows.map((r,ri)=>`<row r="${ri+1}">${r.map((v,ci)=>{if(v===''||v==null)return '';const ref=col(ci)+(ri+1);return (typeof v==='number')?`<c r="${ref}"><v>${v}</v></c>`:(false?'':`<c r="${ref}" t="inlineStr"><is><t>${x(v)}</t></is></c>`)}).join('')}</row>`).join('');
  return zipStore([['[Content_Types].xml','<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/><Override PartName="/xl/worksheets/sheet1.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/></Types>'],
   ['_rels/.rels','<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/></Relationships>'],
   ['xl/workbook.xml',`<?xml version="1.0" encoding="UTF-8" standalone="yes"?><workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><sheets><sheet name="${x(sheetName)}" sheetId="1" r:id="rId1"/></sheets></workbook>`],
@@ -759,13 +777,13 @@ let ZX=null;
 function loadZX(){if(window.ZXing)return Promise.resolve();return new Promise((res,rej)=>{const s=document.createElement('script');s.src='https://cdn.jsdelivr.net/npm/@zxing/library@0.21.3/umd/index.min.js';s.onload=res;s.onerror=()=>rej(new Error('lecteur de codes-barres pas encore installé : ouvrez l\'appli une fois avec internet'));document.head.appendChild(s)})}
 let AC=null;function beep(ok=true){try{AC=AC||new (window.AudioContext||window.webkitAudioContext)();const o=AC.createOscillator(),g=AC.createGain();o.frequency.value=ok?1250:330;g.gain.value=.15;o.connect(g);g.connect(AC.destination);o.start();o.stop(AC.currentTime+(ok?.09:.25))}catch(e){}try{navigator.vibrate&&navigator.vibrate(ok?40:[60,40,60])}catch(e){}}
 // onCode(code) doit renvoyer {ok:bool, txt:string}
-function openScanner(title,onCode,onDone){let last='',lastT=0,stream=null,stop=false,mfr=null,torch=false;const seen=[];
+function openScanner(title,onCode,onDone,opt={}){let last='',lastT=0,lastSeen=0,stream=null,stop=false,mfr=null,torch=false;const seen=[];
  if(!Object.keys(P).length){toast('Base produits vide : connectez-vous à Google (Réglages) pour la charger.');goTab('t1');return}
  $('#modal').innerHTML=`<div class="mbox" style="max-width:520px"><h2>${esc(title)}</h2><div style="position:relative;background:#000;border-radius:10px;overflow:hidden;aspect-ratio:4/3"><video id="scV" playsinline muted autoplay style="width:100%;height:100%;object-fit:cover"></video><div style="position:absolute;left:8%;right:8%;top:32%;bottom:32%;border:3px solid #FFD400;border-radius:8px"></div></div>
  <div id="scMsg" class="mut" style="margin:6px 0">Code-barres <b>à l'horizontale</b> dans le cadre jaune, à 15-20 cm. Il est lu tout seul.</div>
  <div class="row"><button class="b2" id="scTorch" style="display:none">🔦 Lampe</button><label class="b2" style="cursor:pointer">📸 Photo du code<input type="file" id="scPh" accept="image/*" capture="environment" style="display:none"></label></div>
  <div class="row" style="margin-top:6px"><input type="text" id="scIn" inputmode="numeric" placeholder="saisie ou douchette + Entrée" style="flex:1"><button class="b y" id="scEnd">Terminer</button></div><ol id="scList" style="max-height:26vh;overflow:auto;font-size:13px;padding-left:20px"></ol></div>`;$('#modal').style.display='flex';
- const add=c=>{c=eanStr(c);if(!c)return false;if(c.length===12)c='0'+c;const now=Date.now();if(c===last&&now-lastT<2500)return true;last=c;lastT=now;const r=onCode(c)||{ok:true,txt:c};beep(r.ok);seen.push(c);$('#scList').insertAdjacentHTML('afterbegin',`<li style="color:${r.ok?'#111':'#c62828'}">${esc(r.txt)}</li>`);$('#scMsg').textContent=`${seen.length} code(s) scanné(s)`;return true};
+ const add=(c,cam)=>{c=eanStr(c);if(!c)return false;if(c.length===12)c='0'+c;const now=Date.now();if(opt.count){if(cam&&c===last&&now-lastSeen<1200){lastSeen=now;return true}}else if(c===last&&now-lastT<2500)return true;last=c;lastT=now;lastSeen=now;const r=onCode(c)||{ok:true,txt:c};beep(r.ok);seen.push(c);$('#scList').insertAdjacentHTML('afterbegin',`<li style="color:${r.ok?'#111':'#c62828'}">${esc(r.txt)}</li>`);$('#scMsg').textContent=`${seen.length} code(s) scanné(s)`;return true};
  $('#scIn').onkeydown=e=>{if(e.key==='Enter'){add(e.target.value);e.target.value=''}};
  const end=()=>{stop=true;try{stream&&stream.getTracks().forEach(t=>t.stop())}catch(e){}$('#modal').style.display='none';onDone&&onDone(seen)};$('#scEnd').onclick=end;
  const BD=('BarcodeDetector' in window)?new BarcodeDetector({formats:['ean_13','ean_8','upc_a','upc_e']}):null;
@@ -784,7 +802,7 @@ function openScanner(title,onCode,onDone){let last='',lastT=0,stream=null,stop=f
   const tr=stream.getVideoTracks()[0];try{const cap=tr.getCapabilities?tr.getCapabilities():{};const adv={};if(cap.focusMode&&cap.focusMode.includes('continuous'))adv.focusMode='continuous';if(cap.zoom&&cap.zoom.max>=1.6)adv.zoom=Math.min(cap.zoom.max,2);if(Object.keys(adv).length)await tr.applyConstraints({advanced:[adv]});
    if(cap.torch){$('#scTorch').style.display='';$('#scTorch').onclick=()=>{torch=!torch;tr.applyConstraints({advanced:[{torch}]}).catch(()=>{})}}}catch(e){}
   let n=0;const loop=async()=>{if(stop)return;const W=v.videoWidth,H=v.videoHeight;if(W&&H){n++;let c;
-    if(n%3)c=grab(v,W,H,W*.08,H*.32,W*.84,H*.36,1280);else c=grab(v,W,H,0,0,W,H,1100);const code=await dec(c);if(code)add(code)}
+    if(n%3)c=grab(v,W,H,W*.08,H*.32,W*.84,H*.36,1280);else c=grab(v,W,H,0,0,W,H,1100);const code=await dec(c);if(code)add(code,true)}
    setTimeout(loop,90)};loop()}
   catch(e){const why=/NotAllowed|Permission/i.test(e.name+e.message)?'accès à la caméra refusé : Réglages iPhone › Safari › Caméra › Autoriser':e.message;$('#scMsg').innerHTML='Caméra indisponible ('+esc(why)+'). Utilisez <b>📸 Photo du code</b>, la saisie ou une douchette.'}})();
  }
@@ -839,14 +857,24 @@ async function doPdf(kind,btn){const t0=btn.textContent;btn.disabled=true;btn.te
 $('#gPdf').onclick=e=>doPdf('g',e.target);$('#fPdf').onclick=e=>doPdf('f',e.target);
 $('#gScan').onclick=()=>openScanner('Scanner les produits à étiqueter',c=>{let e=P[c]?c:(P[c.padStart(13,'0')]?c.padStart(13,'0'):'');if(!e){if(!UNK.some(u=>u.c===c)){UNK.push({c,d:today()});LS.set('cpb_unk',UNK)}return {ok:false,txt:`${c} : inconnu en caisse → à créer`}}if(SELG.includes(e))return {ok:true,txt:`déjà dans la liste : ${P[e].lib} (1 seule étiquette)`};SELG.push(e);save();return {ok:true,txt:`✔ ${P[e].lib}${P[e].prix==null?' (sans prix)':''}`}},()=>{$('#gSelOnly').checked=true;renderG();renderUnk()});
 $('#gSup').onchange=()=>renderG();
+$('#vZone').onchange=saveV;$('#vNew').onclick=()=>{if(INVZ.order.length&&!confirm('Effacer le comptage en cours ?'))return;INVZ={zone:'',items:{},order:[]};LS.set('cpb_inv',INVZ);renderV()};
+$('#vScan').onclick=()=>{saveV();openScanner('Inventaire'+(INVZ.zone?' · '+INVZ.zone:''),c=>{const e=P[c]?c:P[c.padStart(13,'0')]?c.padStart(13,'0'):c;const n=num($('#vStep').value)||1;vAdd(e,n);return {ok:!!P[e],txt:`${P[e]?P[e].lib:e+' : inconnu'} → ${String(INVZ.items[e]).replace('.',',')}`}},()=>renderV(),{count:true})};
+$('#vBody').addEventListener('change',e=>{if(!e.target.classList.contains('vQ'))return;const c=e.target.closest('tr').dataset.c;const n=num(e.target.value);if(n==null)return;INVZ.items[c]=n;saveV();renderV()});
+$('#vBody').addEventListener('click',e=>{if(!e.target.classList.contains('vDel'))return;const c=e.target.closest('tr').dataset.c;delete INVZ.items[c];INVZ.order=INVZ.order.filter(x=>x!==c);saveV();renderV()});
+$('#vGen').onclick=()=>{saveV();const ks=INVZ.order.filter(c=>INVZ.items[c]!=null);if(!ks.length)return toast('Rien de compté.');const unk=ks.filter(c=>!P[c]);if(unk.length&&!confirm(`${unk.length} code(s) inconnu(s) en caisse : ils seront ignorés par StorePOS. Continuer ?`))return;
+ const d=new Date(),st=`${String(d.getFullYear()).slice(2)}${String(d.getMonth()+1).padStart(2,'0')}${String(d.getDate()).padStart(2,'0')}-${String(d.getHours()).padStart(2,'0')}${String(d.getMinutes()).padStart(2,'0')}`;const z=(INVZ.zone||'ZONE').toUpperCase().replace(/[^A-Z0-9]+/g,'-').replace(/^-|-$/g,'');
+ const name=`INVENTAIRE-${z}-${st}.xlsx`;fileReady(name,xlsx('INVENTAIRE',ks.filter(c=>P[c]).map(c=>[c,INVZ.items[c]])),'INVENTAIRES',`Inventaire partiel ${INVZ.zone||''} : ${ks.length} produit(s). StorePOS : Stock › Inventaire, import Excel, clôture PARTIELLE, magasin fermé.`)};
 $('#pScan').onclick=pScanGo;$('#pq').oninput=e=>pSearch(e.target.value);$('#pList').addEventListener('click',e=>{const b=e.target.closest('.pHit');if(b){showProd(b.dataset.e);$('#pList').innerHTML=''}});
-$('#pPhoto').onchange=async e=>{const f=e.target.files[0];e.target.value='';if(!f)return;const m=$('#pMsg');try{m.textContent='Recherche du code-barres sur la photo…';
+async function pImage(f){const m=$('#pMsg');try{m.textContent='Recherche du code-barres sur la photo…';
   const bm=await createImageBitmap(f);const cv=document.createElement('canvas');const s=Math.min(1,1800/Math.max(bm.width,bm.height));cv.width=bm.width*s;cv.height=bm.height*s;cv.getContext('2d').drawImage(bm,0,0,cv.width,cv.height);let code='';
   try{if('BarcodeDetector' in window){const r=await new BarcodeDetector({formats:['ean_13','ean_8','upc_a']}).detect(cv);if(r[0])code=r[0].rawValue}if(!code){await loadZX();const h=new Map();h.set(ZXing.DecodeHintType.TRY_HARDER,true);const mf=new ZXing.MultiFormatReader();mf.setHints(h);try{code=mf.decodeWithState(new ZXing.BinaryBitmap(new ZXing.HybridBinarizer(new ZXing.HTMLCanvasElementLuminanceSource(cv)))).getText()}catch(x){}}}catch(x){}
   if(code){if(code.length===12)code='0'+code;pPer();$('#pq').value=code;return pSearch(code)}
   m.textContent='Pas de code-barres : lecture du texte de l\'emballage…';const txt=await ocrImage(f,p=>m.textContent=`Lecture du texte : ${p} %`);const w=TOK(txt).filter(x=>!/^\d+$/.test(x));pPer();
   const idx=TOKIDX||tokIndex();const sc={};for(const t of new Set(w))for(const e of (idx[t]||[]))sc[e]=(sc[e]||0)+1;const hits=Object.entries(sc).sort((a,b)=>b[1]-a[1]||((P[b[0]].q||0)-(P[a[0]].q||0))).slice(0,8).map(x=>x[0]);
-  $('#pMsg').textContent=hits.length?'Produits les plus proches du texte lu :':'Rien de reconnu : scannez le code-barres ou cherchez par nom.';pList(hits)}catch(x){m.textContent='Photo illisible : '+x.message}};
+  $('#pMsg').textContent=hits.length?'Produits les plus proches du texte lu :':'Rien de reconnu : scannez le code-barres ou cherchez par nom.';pList(hits)}catch(x){m.textContent='Photo illisible : '+x.message}}
+$('#pPhoto').onchange=e=>{const f=e.target.files[0];e.target.value='';if(f)pImage(f)};
+$('#pPaste').onclick=async()=>{try{if(navigator.clipboard&&navigator.clipboard.read){const items=await navigator.clipboard.read();for(const it of items){const ty=it.types.find(x=>x.startsWith('image/'));if(ty){$('#pPasteZone').style.display='none';return pImage(await it.getType(ty))}}toast('Le presse-papiers ne contient pas d\'image.');return}}catch(e){}const z=$('#pPasteZone');z.style.display='block';z.focus()};
+$('#pPasteZone').addEventListener('paste',e=>{const it=[...(e.clipboardData?.items||[])].find(i=>i.type.startsWith('image/'));if(it){e.preventDefault();$('#pPasteZone').style.display='none';pImage(it.getAsFile())}else setTimeout(()=>{const img=$('#pPasteZone').querySelector('img');if(img){fetch(img.src).then(r=>r.blob()).then(b=>{$('#pPasteZone').style.display='none';$('#pPasteZone').innerHTML='Touchez ici puis « Coller »';pImage(b)}).catch(()=>toast('Image non lisible'))}},200)});
 document.addEventListener('click',e=>{if(e.target.classList.contains('uNew'))openNewProd({e:e.target.dataset.c,lib:'',sup:$('#gSup').value,back:()=>renderG()});if(e.target.classList.contains('uDel')){UNK=UNK.filter(u=>u.c!==e.target.dataset.c);LS.set('cpb_unk',UNK);renderUnk()}});
 const mapTxt=o=>Object.entries(o).map(([k,v])=>`${k} = ${v}`).join('\n');const txtMap=s=>Object.fromEntries(s.split('\n').map(l=>l.split('=')).filter(a=>a.length===2&&a[0].trim()&&a[1].trim()).map(([k,v])=>[k.trim(),+v.trim()||v.trim()]));
 function showMap(){$('#mFam').value=mapTxt(MAP.fam);$('#mSfam').value=mapTxt(MAP.sfam);$('#mGrp').value=mapTxt(MAP.grp);$('#mRay').value=mapTxt(MAP.ray);$('#mFour').value=mapTxt(MAP.four||{})}showMap();
