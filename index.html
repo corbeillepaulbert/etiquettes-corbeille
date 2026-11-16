@@ -77,6 +77,11 @@ nav button{white-space:nowrap}
     <button data-t="t4">Aide</button>
   </nav>
 </header>
+<div id="welcome" style="display:none;position:fixed;inset:0;z-index:50;background:#111;color:#fff;padding:max(40px,env(safe-area-inset-top)) 24px 24px;overflow:auto">
+ <div style="max-width:460px;margin:0 auto;text-align:center"><img src="icon-192.png" alt="" style="width:96px;border-radius:22px"><h1 style="font-size:26px;font-weight:900;margin:18px 0 6px">Étiquettes Corbeille</h1>
+ <p style="opacity:.85">Connectez-vous avec le compte Google du magasin. L'appli récupère la base produits StorePOS sur le Drive, puis se met à jour toute seule à chaque ouverture avec internet.</p>
+ <button class="b y big" id="wGo" style="width:100%;margin-top:18px;font-size:18px">Se connecter avec Google</button>
+ <p id="wMsg" style="color:#FFD400;min-height:20px"></p><button class="b2" id="wSkip" style="margin-top:6px">Continuer sans connexion</button></div></div>
 <main>
 <div id="baseWarn" class="warnbox" style="display:none;margin:10px 0"><b>Base produits vide sur ce téléphone.</b> Sans elle, l'appli ne reconnaît ni les codes-barres ni les lignes de facture. <button class="b y" id="baseGo" style="margin-top:6px">Se connecter à Google et charger la base</button></div>
 <!-- ================= 1. FICHIERS ================= -->
@@ -552,10 +557,17 @@ function dl(name,blob){const a=document.createElement('a');a.href=URL.createObje
 function toast(t){const d=document.createElement('div');d.className='toast';d.textContent=t;document.body.appendChild(d);setTimeout(()=>d.remove(),2600)}
 // ---------- Google Drive (connexion Google, dossier APPLI ETIQUETTES CORBEILLE) ----------
 const ROOTNAME='APPLI ETIQUETTES CORBEILLE';let TOKEN=null,TOKEXP=0,ROOTID=LS.get('cpb_root',null);
-function gisLoad(){return new Promise((res,rej)=>{if(window.google&&google.accounts)return res();const s=document.createElement('script');s.src='https://accounts.google.com/gsi/client';s.onload=res;s.onerror=()=>rej(new Error('pas de connexion internet'));document.head.appendChild(s)})}
-async function gToken(interactive=true){if(TOKEN&&Date.now()<TOKEXP)return TOKEN;const cid=LS.get('cpb_cid','')||window.CPB_CLIENT_ID||'';if(!cid)throw new Error('identifiant Google non réglé (Réglages)');await gisLoad();
- return new Promise((res,rej)=>{const tc=google.accounts.oauth2.initTokenClient({client_id:cid,scope:'https://www.googleapis.com/auth/drive',prompt:interactive?'':'none',callback:r=>{if(r.error)return rej(new Error(r.error));TOKEN=r.access_token;TOKEXP=Date.now()+(r.expires_in-60)*1000;$('#gStat').textContent='Connecté à Google Drive';res(TOKEN)}});tc.requestAccessToken()})}
-async function gf(url,opt={}){const t=await gToken();const r=await fetch(url,Object.assign({},opt,{headers:Object.assign({Authorization:'Bearer '+t},opt.headers||{})}));if(!r.ok)throw new Error('Drive '+r.status);return r}
+// Connexion par redirection (les fenêtres popup ne reviennent pas dans une appli installée sur l'écran d'accueil iPhone)
+const REDIR=location.origin+location.pathname.replace(/index\.html$/,'');
+{const _k=LS.get('cpb_tok',null);if(_k){TOKEN=_k.t;TOKEXP=_k.x}}
+function gAuth(silent){const cid=LS.get('cpb_cid','')||window.CPB_CLIENT_ID||'';if(!cid)throw new Error('identifiant Google non réglé');const u=new URL('https://accounts.google.com/o/oauth2/v2/auth');
+ const q={client_id:cid,redirect_uri:REDIR,response_type:'token',scope:'https://www.googleapis.com/auth/drive',include_granted_scopes:'true',state:silent?'s':'i'};if(silent)q.prompt='none';const h=LS.get('cpb_gmail','');if(h)q.login_hint=h;
+ for(const [k,v] of Object.entries(q))u.searchParams.set(k,v);LS.set('cpb_authT',Date.now());location.replace(u.href)}
+function gReturn(){const h=new URLSearchParams(location.hash.slice(1));if(!h.has('access_token')&&!h.has('error'))return null;history.replaceState(null,'',REDIR);
+ if(h.get('access_token')){TOKEN=h.get('access_token');TOKEXP=Date.now()+((+h.get('expires_in')||3600)-120)*1000;LS.set('cpb_tok',{t:TOKEN,x:TOKEXP});LS.set('cpb_everConn',1);LS.set('cpb_needLogin',0);return 'ok'}
+ LS.set('cpb_needLogin',1);return h.get('error')}
+async function gToken(interactive=true){if(TOKEN&&Date.now()<TOKEXP)return TOKEN;if(interactive){gAuth(false);return new Promise(()=>{})}throw new Error('connexion Google expirée')}
+async function gf(url,opt={}){const t=await gToken();const r=await fetch(url,Object.assign({},opt,{headers:Object.assign({Authorization:'Bearer '+t},opt.headers||{})}));if(r.status===401){TOKEN=null;TOKEXP=0;LS.set('cpb_tok',null)}if(!r.ok)throw new Error('Drive '+r.status);return r}
 async function gFind(name,parent,folder){const q=`name='${name.replace(/'/g,"\\'")}' and trashed=false${parent?` and '${parent}' in parents`:''}${folder?" and mimeType='application/vnd.google-apps.folder'":''}`;const j=await (await gf('https://www.googleapis.com/drive/v3/files?fields=files(id,name,modifiedTime,webViewLink)&q='+encodeURIComponent(q))).json();return j.files[0]}
 async function gFolder(name,parent){const f=await gFind(name,parent,true);if(f)return f.id;const j=await (await gf('https://www.googleapis.com/drive/v3/files',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name,mimeType:'application/vnd.google-apps.folder',parents:parent?[parent]:undefined})})).json();return j.id}
 async function gRoot(){if(ROOTID)return ROOTID;ROOTID=await gFolder(ROOTNAME);LS.set('cpb_root',ROOTID);return ROOTID}
@@ -735,7 +747,15 @@ $('#invDrive').onclick=async()=>{const pr=$('#invProg');try{pr.textContent='Rech
  $('#modal').innerHTML=`<div class="mbox"><h2>Factures récentes du Drive</h2><div style="max-height:60vh;overflow:auto">${fs.map(f=>`<button class="b2 dInv" data-id="${f.id}" data-n="${esc(f.name)}" style="display:block;width:100%;text-align:left;margin:4px 0">${esc(f.name)}<div class="mut">${new Date(f.modifiedTime).toLocaleDateString('fr-FR')}</div></button>`).join('')||'<p class="mut">Aucun PDF trouvé.</p>'}</div><button class="b2" id="dX" style="margin-top:8px">Fermer</button></div>`;$('#modal').style.display='flex';$('#dX').onclick=()=>$('#modal').style.display='none';
  document.querySelectorAll('.dInv').forEach(b=>b.onclick=async()=>{$('#modal').style.display='none';pr.textContent='Téléchargement…';const bl=await (await gf(`https://www.googleapis.com/drive/v3/files/${b.dataset.id}?alt=media`)).blob();runPdf([new File([bl],b.dataset.n,{type:'application/pdf'})])})}catch(e){pr.textContent='Drive : '+e.message+' (connectez-vous dans Réglages)'}};
 function baseWarn(){$('#baseWarn').style.display=Object.keys(P).length?'none':'block'}
-$('#baseGo').onclick=async()=>{goTab('t1');try{await gToken(true);await driveSync()}catch(e){$('#gStat').textContent='Google : '+e.message}};
+$('#baseGo').onclick=()=>gAuth(false);$('#wGo').onclick=()=>{try{gAuth(false)}catch(e){$('#wMsg').textContent=e.message}};$('#wSkip').onclick=()=>{$('#welcome').style.display='none';LS.set('cpb_skipT',Date.now())};
+// au démarrage : retour de Google, reconnexion silencieuse, synchro automatique
+async function boot(){const r=gReturn();const online=navigator.onLine;const valid=TOKEN&&Date.now()<TOKEXP;
+ if(r&&r!=='ok'&&LS.get('cpb_authT',0)&&r!=='interaction_required'&&r!=='login_required'&&r!=='consent_required')$('#wMsg').textContent='Google a refusé la connexion : '+r;
+ if(valid){$('#gStat').textContent='Connecté à Google Drive';try{const a=await (await gf('https://www.googleapis.com/drive/v3/about?fields=user(emailAddress)')).json();if(a.user)LS.set('cpb_gmail',a.user.emailAddress)}catch(e){}
+  if(online&&Date.now()-LS.get('cpb_lastsync',0)>5*60*1000)driveSync();return}
+ if(online&&LS.get('cpb_everConn',0)&&!LS.get('cpb_needLogin',0)&&Date.now()-LS.get('cpb_authT',0)>60*1000){try{return gAuth(true)}catch(e){}}
+ if(!LS.get('cpb_everConn',0)||LS.get('cpb_needLogin',0)){if(Date.now()-LS.get('cpb_skipT',0)>12*3600*1000||!Object.keys(P).length)$('#welcome').style.display='block'}}
+document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible'&&navigator.onLine&&TOKEN&&Date.now()<TOKEXP&&Date.now()-LS.get('cpb_lastsync',0)>15*60*1000)driveSync()});
 $('#invPhoto').onchange=e=>{if(e.target.files.length)runOcr([...e.target.files]);e.target.value=''};$('#invPick').onchange=e=>{if(e.target.files.length)runOcr([...e.target.files]);e.target.value=''};
 $('#invTxtB').onclick=()=>{$('#invTxtBox').style.display=$('#invTxtBox').style.display==='none'?'block':'none'};$('#invParse').onclick=()=>{INV=parseInvoice($('#invTxt').value);renderInv()};
 wireInv();$('#invRes').addEventListener('click',e=>{if(e.target.id==='invApply')applyInv()});
@@ -752,11 +772,11 @@ const mapTxt=o=>Object.entries(o).map(([k,v])=>`${k} = ${v}`).join('\n');const t
 function showMap(){$('#mFam').value=mapTxt(MAP.fam);$('#mSfam').value=mapTxt(MAP.sfam);$('#mGrp').value=mapTxt(MAP.grp);$('#mRay').value=mapTxt(MAP.ray)}showMap();
 $('#mSave').onclick=()=>{MAP={fam:txtMap($('#mFam').value),sfam:txtMap($('#mSfam').value),grp:txtMap($('#mGrp').value),ray:txtMap($('#mRay').value)};saveApp();toast('Codes enregistrés')};
 $('#gCid').value=LS.get('cpb_cid','')||window.CPB_CLIENT_ID||'';$('#gCid').onchange=()=>LS.set('cpb_cid',$('#gCid').value.trim());
-$('#gConn').onclick=async()=>{LS.set('cpb_cid',$('#gCid').value.trim());try{await gToken(true);await driveSync()}catch(e){$('#gStat').textContent='Google : '+e.message}};$('#gSync').onclick=()=>driveSync();
+$('#gConn').onclick=()=>{LS.set('cpb_cid',$('#gCid').value.trim());try{gAuth(false)}catch(e){$('#gStat').textContent='Google : '+e.message}};$('#gSync').onclick=()=>driveSync();
 const _exp=$('#expSet').onclick;$('#expSet').onclick=()=>dl('reglages-etiquettes-corbeille.json',new Blob([JSON.stringify(allSettings(),null,1)],{type:'application/json'}));
 $('#setIn').onchange=async e=>{const f=e.target.files[0];if(!f)return;try{const j=JSON.parse(await f.text());mergeSettings(j);if(j.map)MAP=j.map;showMap();$('#stSet').textContent='Réglages importés.'}catch(x){$('#stSet').textContent='Fichier illisible.'}};
 if('serviceWorker' in navigator&&(location.protocol==='https:'||location.hostname==='localhost'))navigator.serviceWorker.register('sw.js').catch(()=>{});
-applyChg();updBadge();showSum();baseWarn();
+applyChg();updBadge();showSum();baseWarn();boot();
 </script>
 </body>
 </html>
