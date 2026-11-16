@@ -69,6 +69,7 @@ nav button{white-space:nowrap}
   <h1>Étiquettes &amp; affiches · La Corbeille Paul Bert</h1>
   <nav>
     <button data-t="t5" class="on">Facture</button>
+    <button data-t="t8">Produit</button>
     <button data-t="t2">Gondole</button>
     <button data-t="t3">Fruits &amp; légumes</button>
     <button data-t="t7">Saison</button>
@@ -201,6 +202,13 @@ nav button{white-space:nowrap}
 </section>
 
 <!-- ================= 4. AIDE ================= -->
+<section id="t8">
+  <div class="card"><h2>Fiche produit et ventes moyennes</h2><p class="mut">Aide à l'achat : scannez un produit (ou photo de l'emballage, ou recherche) pour voir ses ventes moyennes, son prix d'achat et sa marge.</p>
+  <div class="row"><button class="b y big" id="pScan">📷 Scanner un produit</button><label class="b2" style="cursor:pointer">🖼 Photo du produit<input type="file" id="pPhoto" accept="image/*" capture="environment" style="display:none"></label></div>
+  <div class="row" style="margin-top:8px"><input type="text" id="pq" placeholder="ou rechercher : nom, code-barres, réf. fournisseur" style="flex:1;font-size:16px"></div>
+  <div id="pMsg" class="mut" style="margin-top:6px"></div><div id="pList"></div></div>
+  <div id="pCard"></div>
+</section>
 <section id="t4">
   <div class="card help">
     <h2>Écrire un nom d'étiquette lisible</h2>
@@ -239,7 +247,7 @@ const $=s=>document.querySelector(s);
 const esc=s=>String(s??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 function save(){LS.set('cpb_names',SETN);LS.set('cpb_fl',SETF);LS.set('cpb_selg',SELG);LS.set('cpb_self',SELF);LS.set('cpb_force',FORCE)}
 // ---------- onglets ----------
-document.querySelectorAll('nav button').forEach(b=>b.onclick=()=>{document.querySelectorAll('nav button').forEach(x=>x.classList.toggle('on',x===b));document.querySelectorAll('section').forEach(s=>s.classList.toggle('on',s.id===b.dataset.t));if(b.dataset.t==='t2')renderG();if(b.dataset.t==='t3')renderF();if(b.dataset.t==='t7')renderS();if(b.dataset.t==='t6')renderI();window.scrollTo(0,0)});
+document.querySelectorAll('nav button').forEach(b=>b.onclick=()=>{document.querySelectorAll('nav button').forEach(x=>x.classList.toggle('on',x===b));document.querySelectorAll('section').forEach(s=>s.classList.toggle('on',s.id===b.dataset.t));if(b.dataset.t==='t2')renderG();if(b.dataset.t==='t3')renderF();if(b.dataset.t==='t7')renderS();if(b.dataset.t==='t6')renderI();if(b.dataset.t==='t8')pPer();window.scrollTo(0,0)});
 // ---------- lecture xlsx (zip + xml) ----------
 async function inflate(buf){const ds=new DecompressionStream('deflate-raw');const s=new Blob([buf]).stream().pipeThrough(ds);return new Uint8Array(await new Response(s).arrayBuffer())}
 async function unzip(ab){const u=new Uint8Array(ab),dv=new DataView(ab);let e=u.length-22;while(e>=0&&dv.getUint32(e,true)!==0x06054b50)e--;if(e<0)throw new Error('zip');
@@ -275,7 +283,7 @@ async function loadFile(file,kind){const ab=await file.arrayBuffer();let rows;
   else{if(cQ>=0){const q=num(r[cQ]);o.q=(o.q&&o.seenV?o.q:0)+(q||0);o.seenV=1}if(o.prix==null&&cP>=0)o.prix=num(r[cP]);if(!o.dep&&cD>=0)o.dep=String(r[cD]??'');if(!o.fromBase)o.lib=lib}
   n++}
  Object.values(P).forEach(o=>delete o.seenV);
- META[kind]={name:file.name,n,date:new Date().toLocaleString('fr-FR')};TOKIDX=null;REFDB=null;
+ META[kind]={name:file.name,n,date:new Date().toLocaleString('fr-FR')};if(kind==='ventes'){const m=file.name.match(/(\d{2})[_.-](\d{2})[_.-](\d{2,4})[_ .-]+(?:au[_ .-]+)?(\d{2})[_.-](\d{2})[_.-](\d{2,4})/i);const Y=y=>y.length===2?'20'+y:y;let days=365,from='',to='';if(m){from=`${Y(m[3])}-${m[2]}-${m[1]}`;to=`${Y(m[6])}-${m[5]}-${m[4]}`;const d=(new Date(to)-new Date(from))/864e5+1;if(d>6&&d<2000)days=Math.round(d)}META.ventes.days=days;META.ventes.from=from;META.ventes.to=to}TOKIDX=null;REFDB=null;
  for(const [e,c] of Object.entries(CHG)){if(P[e]&&c.prix!=null&&P[e].prix0!=null&&Math.abs(P[e].prix0-c.prix)<0.005){delete c.prix;if(!Object.keys(c).filter(k=>!['src','date'].includes(k)).length)delete CHG[e]}}
  for(const e of Object.keys(NEWF))if(P[e]&&P[e].fromBase)delete NEWF[e];applyChg();LS.set('cpb_meta',META);LS.set('cpb_products',P);if(typeof saveApp==='function')saveApp();showSum()}
 function showSum(){const all=Object.values(P);$('#stBase').textContent=META.base?`${META.base.name} · ${META.base.n} lignes · ${META.base.date}`:'Aucun fichier';$('#stVentes').textContent=META.ventes?`${META.ventes.name} · ${META.ventes.n} lignes · ${META.ventes.date}`:'Aucun fichier';
@@ -324,7 +332,7 @@ const STAR=s=>`<svg width="${s}" height="${s}" viewBox="0 0 60 60" style="displa
 function lblTop(o){const nm=nameOf(o),u=pu(o,nm);const ub=u?`<div style="font-size:11px;font-weight:900">${u[0]}</div><div style="font-size:22px;font-weight:900;margin-top:2px">${u[1]}</div>`:'';
  const prb=o.prix!=null?price3(o.prix,'#fff',o.prix<10?.42:.48):`<div style="font-weight:900;font-size:30px;color:#fff">PRIX À DÉFINIR</div>`;
  return frame(`<div style="position:absolute;inset:0;display:flex"><div style="width:54px;background:#000;color:#fff;display:flex;flex-direction:column;align-items:center;justify-content:space-between;padding:14px 0 12px">${STAR(24)}<div style="writing-mode:vertical-rl;transform:rotate(180deg);font-weight:900;font-size:25px;letter-spacing:3px;white-space:nowrap">TOP VENTE</div>${STAR(24)}</div><div style="flex-grow:1;display:flex;flex-direction:column;min-width:0"><div style="padding:8px 12px 2px 14px">${nameBlk(nm,447,124)}</div><div style="background:#000;color:#fff;height:74px;display:flex;align-items:center;justify-content:space-between;padding:0 14px 0 16px">${prb}<div style="text-align:right;line-height:1">${ub}</div></div><div style="flex-grow:1;display:flex;align-items:center;justify-content:center">${barcode(o.e,228,54)}</div></div></div>`)}
-const isTop=o=>(o.q||0)>=(+$('#seuil').value||365);
+const isTop=o=>(o.q||0)*365/(META.ventes?.days||365)>=(+$('#seuil').value||365);
 const modelOf=o=>FORCE[o.e]||(isTop(o)?'top':'std');
 function sheetG(list){const sc=(66*96/25.4/529).toFixed(5);let pages='';for(let i=0;i<list.length;i+=24){const cells=list.slice(i,i+24).map(o=>`<div style="width:66mm;height:35mm;overflow:hidden;position:relative"><div style="transform:scale(${sc});transform-origin:0 0;width:529px;height:280px">${(($('#gForce').value||modelOf(o))==='top'?lblTop:lblStd)(o)}</div></div>`).join('');
  pages+=`<div class="pg"><div style="position:absolute;left:6mm;top:8.5mm;display:grid;grid-template-columns:repeat(3,66mm);grid-template-rows:repeat(8,35mm)">${cells}</div></div>`}return pages}
@@ -543,6 +551,24 @@ function openNewProd(pre){const deps=Object.keys(DEPT).filter(d=>!/FRUITS ET LEG
 // ---------- produits inconnus scannés en gondole ----------
 let UNK=LS.get('cpb_unk',[]);
 function renderUnk(){const b=$('#gUnk');if(!b)return;b.innerHTML=UNK.length?`<div class="warnbox"><b>${UNK.length} produit(s) inconnu(s) en caisse</b>${UNK.map(u=>`<div class="row" style="margin-top:6px"><span style="min-width:130px">${u.c}</span><button class="b y uNew" data-c="${u.c}">➕ Créer l'article</button><button class="b2 uDel" data-c="${u.c}">retirer</button></div>`).join('')}</div>`:''}
+// ---------- fiche produit : ventes moyennes (aide à l'achat) ----------
+function pPer(){const v=META.ventes;$('#pMsg').textContent=v?`Ventes : ${v.name}${v.from?` (du ${v.from.split('-').reverse().join('/')} au ${v.to.split('-').reverse().join('/')}, ${v.days} jours)`:` (${v.days||365} jours supposés)`}`:'Aucun fichier de ventes : déposez l\'export Vente PLU dans EXPORTS STOREPOS.'}
+const f1=x=>x==null?'–':(x>=10?Math.round(x).toLocaleString('fr-FR'):x.toLocaleString('fr-FR',{maximumFractionDigits:1}));
+function showProd(e){const o=P[e];if(!o){$('#pCard').innerHTML=`<div class="card"><h2>${esc(e)} : inconnu en caisse</h2><button class="b y" onclick="openNewProd({e:'${esc(e)}',lib:'',sup:''})">➕ Créer l'article</button></div>`;return}
+ const days=META.ventes?.days||365,q=o.q,has=META.ventes&&q!=null;const tva=/TAUX NORMAL/.test(key(o.dep))?1.2:/INTERM/.test(key(o.dep))?1.1:1.055;const pa=CHG[e]?.pa??o.pa0;const m=(o.prix&&pa)?(1-pa/(o.prix/tva)):null;
+ const row=(a,b)=>`<tr><td class="mut">${a}</td><td style="font-weight:700;text-align:right">${b}</td></tr>`;
+ $('#pCard').innerHTML=`<div class="card"><h2>${esc(o.lib)}</h2><p class="mut">${o.e}${o.reff?' · réf. '+esc(o.reff):''}${o.four?' · '+esc(o.four):''}${o.dep?' · '+esc(o.dep):''}</p>
+ <div class="row" style="gap:10px;margin:8px 0">${[['par jour',has?q/days:null],['par semaine',has?q*7/days:null],['par mois',has?q*30.44/days:null]].map(([l,v])=>`<div style="flex:1;min-width:90px;background:#FFF9C4;border-radius:10px;padding:10px;text-align:center"><div style="font-size:26px;font-weight:900">${f1(v)}</div><div class="mut">${l}</div></div>`).join('')}</div>
+ <table style="width:100%">${row('Vendus sur la période',has?`${f1(q)} en ${days} j`:'pas de vente enregistrée')}${row('Prix de vente TTC',o.prix!=null?fmt(o.prix)+' €':'–')}${row("Prix d'achat HT",pa!=null?fmt(pa)+' €':'–')}${row('Marge',m!=null?Math.round(m*100)+' %':'–')}${isTop(o)?row('Classement','<span class="pill p-top">TOP VENTE</span>'):''}</table>
+ <p class="mut" style="margin-top:6px">Moyennes = total vendu ÷ durée de l'export (les variations de saison ne sont pas visibles).</p>
+ <div class="row" style="margin-top:8px"><button class="b2" id="pLab">🏷 Ajouter une étiquette</button><button class="b2" id="pScan2">📷 Produit suivant</button></div></div>`;
+ $('#pLab').onclick=()=>{if(isFL(o)){if(!SELF.includes(e))SELF.push(e)}else if(!SELG.includes(e))SELG.push(e);save();toast('Ajouté aux étiquettes')};$('#pScan2').onclick=pScanGo}
+function pList(ids){$('#pList').innerHTML=ids.length?ids.map(e=>`<button class="b2 pHit" data-e="${e}" style="display:block;width:100%;text-align:left;margin:4px 0">${esc(P[e].lib)} <span class="mut">${e}</span></button>`).join(''):'<p class="mut">Aucun produit trouvé.</p>'}
+function pSearch(v){v=String(v||'').trim();if(!v){$('#pList').innerHTML='';return}const c=eanStr(v);if(/^\d{6,14}$/.test(c)){const e=P[c]?c:P[c.padStart(13,'0')]?c.padStart(13,'0'):'';if(e){$('#pList').innerHTML='';return showProd(e)}}
+ const q=norm(v);const hits=Object.values(P).filter(o=>norm(o.lib).includes(q)||(o.reff&&norm(o.reff)===q)).sort((a,b)=>(b.q||0)-(a.q||0)).slice(0,12).map(o=>o.e);
+ if(!hits.length){const R=refDb();const toks=TOK(v);const sc={};const idx=TOKIDX||tokIndex();for(const w of toks)for(const e of (idx[w]||[]))sc[e]=(sc[e]||0)+1;hits.push(...Object.entries(sc).sort((a,b)=>b[1]-a[1]).slice(0,8).map(x=>x[0]))}
+ pList(hits);if(hits.length===1)showProd(hits[0])}
+function pScanGo(){openScanner('Scanner un produit',c=>{const e=P[c]?c:P[c.padStart(13,'0')]?c.padStart(13,'0'):'';setTimeout(()=>{$('#scEnd').click();showProd(e||c)},150);return {ok:!!e,txt:e?P[e].lib:c+' : inconnu'}})}
 // ---------- saison (hors saison = pas acheté depuis 28 jours) ----------
 let SEUIL_J=28;
 function saisonRows(){return Object.values(P).filter(o=>isFL(o)&&!o.neuf).map(o=>{const k=autoIll(o.lib),d=HIST[k],g=key(CHG[o.e]?.groupe||o.grp||'');const age=days(d);
@@ -614,7 +640,7 @@ async function driveUpload(name,blob,sub){const root=await gRoot();const par=sub
  const j=await (await gf(`https://www.googleapis.com/upload/drive/v3/files${ex?'/'+ex.id:''}?uploadType=multipart&fields=id,webViewLink`,{method:ex?'PATCH':'POST',body:fd})).json();return j.webViewLink}
 async function driveSync(){const st=$('#gStat');try{st.textContent='Synchronisation…';const root=await gRoot();const exp=await gFolder('EXPORTS STOREPOS',root);
  const j=await (await gf('https://www.googleapis.com/drive/v3/files?orderBy=modifiedTime desc&fields=files(id,name,modifiedTime)&q='+encodeURIComponent(`'${exp}' in parents and trashed=false`))).json();
- const fs=j.files.filter(f=>/\.(xlsx|csv)$/i.test(f.name));let fv=fs.find(f=>/vente/i.test(f.name)),fp=fs.find(f=>!/vente/i.test(f.name));
+ const fs=j.files.filter(f=>/\.(xlsx|csv)$/i.test(f.name));let fv=fs.find(f=>/vente|plu/i.test(f.name)),fp=fs.find(f=>!/vente|plu/i.test(f.name));
  const q1=async q=>((await (await gf('https://www.googleapis.com/drive/v3/files?orderBy=modifiedTime desc&pageSize=10&fields=files(id,name,modifiedTime)&q='+encodeURIComponent(q+" and trashed=false and mimeType='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'"))).json()).files||[]);
  if(!fp)fp=(await q1("name contains 'tous les produits'"))[0]||(await q1("name contains 'export_catalogue'")).find(f=>!/AGIDRA|METRO|AGRIFRESH|DCA|MONDIAL/i.test(f.name));
  if(!fv)fv=(await q1("name contains 'Vente'"))[0];if(!fp)throw new Error('aucun export produits StorePOS trouvé : déposez-le dans APPLI ETIQUETTES CORBEILLE › EXPORTS STOREPOS');
@@ -813,6 +839,14 @@ async function doPdf(kind,btn){const t0=btn.textContent;btn.disabled=true;btn.te
 $('#gPdf').onclick=e=>doPdf('g',e.target);$('#fPdf').onclick=e=>doPdf('f',e.target);
 $('#gScan').onclick=()=>openScanner('Scanner les produits à étiqueter',c=>{let e=P[c]?c:(P[c.padStart(13,'0')]?c.padStart(13,'0'):'');if(!e){if(!UNK.some(u=>u.c===c)){UNK.push({c,d:today()});LS.set('cpb_unk',UNK)}return {ok:false,txt:`${c} : inconnu en caisse → à créer`}}if(SELG.includes(e))return {ok:true,txt:`déjà dans la liste : ${P[e].lib} (1 seule étiquette)`};SELG.push(e);save();return {ok:true,txt:`✔ ${P[e].lib}${P[e].prix==null?' (sans prix)':''}`}},()=>{$('#gSelOnly').checked=true;renderG();renderUnk()});
 $('#gSup').onchange=()=>renderG();
+$('#pScan').onclick=pScanGo;$('#pq').oninput=e=>pSearch(e.target.value);$('#pList').addEventListener('click',e=>{const b=e.target.closest('.pHit');if(b){showProd(b.dataset.e);$('#pList').innerHTML=''}});
+$('#pPhoto').onchange=async e=>{const f=e.target.files[0];e.target.value='';if(!f)return;const m=$('#pMsg');try{m.textContent='Recherche du code-barres sur la photo…';
+  const bm=await createImageBitmap(f);const cv=document.createElement('canvas');const s=Math.min(1,1800/Math.max(bm.width,bm.height));cv.width=bm.width*s;cv.height=bm.height*s;cv.getContext('2d').drawImage(bm,0,0,cv.width,cv.height);let code='';
+  try{if('BarcodeDetector' in window){const r=await new BarcodeDetector({formats:['ean_13','ean_8','upc_a']}).detect(cv);if(r[0])code=r[0].rawValue}if(!code){await loadZX();const h=new Map();h.set(ZXing.DecodeHintType.TRY_HARDER,true);const mf=new ZXing.MultiFormatReader();mf.setHints(h);try{code=mf.decodeWithState(new ZXing.BinaryBitmap(new ZXing.HybridBinarizer(new ZXing.HTMLCanvasElementLuminanceSource(cv)))).getText()}catch(x){}}}catch(x){}
+  if(code){if(code.length===12)code='0'+code;pPer();$('#pq').value=code;return pSearch(code)}
+  m.textContent='Pas de code-barres : lecture du texte de l\'emballage…';const txt=await ocrImage(f,p=>m.textContent=`Lecture du texte : ${p} %`);const w=TOK(txt).filter(x=>!/^\d+$/.test(x));pPer();
+  const idx=TOKIDX||tokIndex();const sc={};for(const t of new Set(w))for(const e of (idx[t]||[]))sc[e]=(sc[e]||0)+1;const hits=Object.entries(sc).sort((a,b)=>b[1]-a[1]||((P[b[0]].q||0)-(P[a[0]].q||0))).slice(0,8).map(x=>x[0]);
+  $('#pMsg').textContent=hits.length?'Produits les plus proches du texte lu :':'Rien de reconnu : scannez le code-barres ou cherchez par nom.';pList(hits)}catch(x){m.textContent='Photo illisible : '+x.message}};
 document.addEventListener('click',e=>{if(e.target.classList.contains('uNew'))openNewProd({e:e.target.dataset.c,lib:'',sup:$('#gSup').value,back:()=>renderG()});if(e.target.classList.contains('uDel')){UNK=UNK.filter(u=>u.c!==e.target.dataset.c);LS.set('cpb_unk',UNK);renderUnk()}});
 const mapTxt=o=>Object.entries(o).map(([k,v])=>`${k} = ${v}`).join('\n');const txtMap=s=>Object.fromEntries(s.split('\n').map(l=>l.split('=')).filter(a=>a.length===2&&a[0].trim()&&a[1].trim()).map(([k,v])=>[k.trim(),+v.trim()||v.trim()]));
 function showMap(){$('#mFam').value=mapTxt(MAP.fam);$('#mSfam').value=mapTxt(MAP.sfam);$('#mGrp').value=mapTxt(MAP.grp);$('#mRay').value=mapTxt(MAP.ray);$('#mFour').value=mapTxt(MAP.four||{})}showMap();
