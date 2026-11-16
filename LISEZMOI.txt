@@ -1,0 +1,4 @@
+APPLI ÉTIQUETTES — La Corbeille Paul Bert
+Contenu à publier tel quel (dossier complet) sur un hébergement HTTPS, par exemple GitHub Pages :
+index.html, sw.js, manifest.json, icon-*.png, tessdata/fra.traineddata.gz
+Voir le guide d'installation dans le projet Claude (claude/appli-iphone-installation.md).
