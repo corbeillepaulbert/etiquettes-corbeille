@@ -78,14 +78,18 @@ nav button{white-space:nowrap}
   </nav>
 </header>
 <main>
+<div id="baseWarn" class="warnbox" style="display:none;margin:10px 0"><b>Base produits vide sur ce téléphone.</b> Sans elle, l'appli ne reconnaît ni les codes-barres ni les lignes de facture. <button class="b y" id="baseGo" style="margin-top:6px">Se connecter à Google et charger la base</button></div>
 <!-- ================= 1. FICHIERS ================= -->
 <section id="t5" class="on">
   <div class="card">
-    <h2>Photographier une facture</h2>
-    <p class="mut">Facture Agrifresh, Metro, Promocash ou Agidra. La lecture se fait sur le téléphone, sans internet. Prenez la page bien à plat, en pleine lumière, toute la page dans le cadre. Plusieurs photos possibles (une par page).</p>
-    <div class="row"><label class="b y big" style="display:inline-block;cursor:pointer">📷 Prendre en photo<input type="file" id="invPhoto" accept="image/*" capture="environment" multiple style="display:none"></label>
+    <h2>Lire une facture</h2>
+    <p class="mut"><b>Le plus fiable : le PDF</b> reçu par mail (Metro, Mondial, Agrifresh…) : lecture exacte, sans erreur de chiffre. La photo reste possible pour les factures papier.</p>
+    <div class="row"><button class="b y big" id="invDrive">📥 Factures du Drive</button>
+    <label class="b y big" style="display:inline-block;cursor:pointer">📄 Ouvrir un PDF<input type="file" id="invPdf" accept="application/pdf,.pdf,image/*" multiple style="display:none"></label></div>
+    <div class="row" style="margin-top:6px"><label class="b2" style="cursor:pointer">📷 Photo (papier)<input type="file" id="invPhoto" accept="image/*" capture="environment" multiple style="display:none"></label>
     <label class="b2" style="cursor:pointer">Choisir des photos<input type="file" id="invPick" accept="image/*" multiple style="display:none"></label>
     <button class="b2" id="invTxtB">Coller le texte</button></div>
+    <p class="mut" style="margin-top:6px">Photo : page à plat, en pleine lumière, toute la page dans le cadre, téléphone bien parallèle.</p>
     <div id="invProg" class="mut" style="margin-top:8px"></div>
     <div id="invTxtBox" style="display:none;margin-top:8px"><textarea id="invTxt" rows="8" style="width:100%" placeholder="Texte de la facture (lu ou copié d'un PDF)"></textarea><button class="b" id="invParse">Analyser ce texte</button></div>
   </div>
@@ -431,7 +435,29 @@ async function prepImage(file){const bmp=await createImageBitmap(file);const sc=
 const COUNTRIES=['ESPAGNE','MAROC','FRANCE','ITALIE','HOLLANDE','EGYPTE','ARGENTINE','CHINE','COSTA-RICA','COSTA RICA','EQUATEUR','COLOMBIE','PORTUGAL','TURQUIE','PEROU','CHILI','BRESIL','GRECE','BELGIQUE','MEXIQUE','MAURITANIE','AFRIQUE DU SUD','GUATEMALA','COTE-D IVOIRE','COTE D IVOIRE','REPUBLIQUE POPULAIRE DE CHINE','UKRAINE','BULGARIE'];
 const C2={'ESPAGNE':'ES','MAROC':'MA','FRANCE':'FR','ITALIE':'IT','HOLLANDE':'NL','EGYPTE':'EG','ARGENTINE':'AR','CHINE':'CN','REPUBLIQUE POPULAIRE DE CHINE':'CN','COSTA-RICA':'CR','COSTA RICA':'CR','EQUATEUR':'EC','COLOMBIE':'CO','PORTUGAL':'PT','TURQUIE':'TR','PEROU':'PE','CHILI':'CL','BRESIL':'BR','GRECE':'GR','BELGIQUE':'BE','MEXIQUE':'MX','MAURITANIE':'MR','AFRIQUE DU SUD':'ZA','GUATEMALA':'GT','COTE-D IVOIRE':'CI','COTE D IVOIRE':'CI'};
 function fixNum(s){if(s==null)return null;s=String(s).replace(/[Oo]/g,'0').replace(/[|\]!:;'’]/g,'').replace(',','.');if(/^\d{3}$/.test(s))s=s[0]+'.'+s.slice(1);if(/^\d{4}$/.test(s))s=s.slice(0,2)+'.'+s.slice(2);const n=parseFloat(s);return isNaN(n)?null:n}
-function detectSupplier(t){const u=key(t);if(/AGRIFRESH|CORBAS/.test(u))return 'AGRIFRESH';if(/METRO/.test(u))return 'METRO';if(/PROMOCASH/.test(u))return 'PROMOCASH';if(/AGIDRA/.test(u))return 'AGIDRA';return 'AUTRE'}
+function detectSupplier(t){const u=key(t);if(/AGRIFRESH|CORBAS/.test(u))return 'AGRIFRESH';if(/METRO/.test(u))return 'METRO';if(/PROMOCASH/.test(u))return 'PROMOCASH';if(/AGIDRA/.test(u))return 'AGIDRA';if(/MONDIAL/.test(u))return 'MONDIAL';if(/\bDCA\b/.test(u))return 'DCA';if(/GLOBAL FOOD/.test(u))return 'GLOBAL FOOD';if(/TRANSGOURMET/.test(u))return 'TRANSGOURMET';return 'AUTRE'}
+let PDFJS=null;async function pdfLib(){if(PDFJS)return PDFJS;try{PDFJS=await import(new URL('lib/pdf.min.mjs',location.href).href)}catch(e){throw new Error('lecteur PDF pas encore installé : ouvrez l\'appli une fois avec internet')}PDFJS.GlobalWorkerOptions.workerSrc=new URL('lib/pdf.worker.min.mjs',location.href).href;return PDFJS}
+// texte d'un PDF, ligne par ligne ; une page sans texte (scan) est rendue en image pour la lecture optique
+async function pdfRead(file){const L=await pdfLib();const doc=await L.getDocument({data:new Uint8Array(await file.arrayBuffer())}).promise;let text='';const imgs=[];
+ for(let p=1;p<=doc.numPages;p++){const pg=await doc.getPage(p);const tc=await pg.getTextContent();const it=tc.items.filter(i=>i.str&&i.str.trim());
+  if(it.length<15){const vp=pg.getViewport({scale:2.6});const c=document.createElement('canvas');c.width=vp.width;c.height=vp.height;await pg.render({canvasContext:c.getContext('2d'),viewport:vp}).promise;imgs.push(c);continue}
+  const rows=[];for(const i of it){const y=i.transform[5];let r=rows.find(r=>Math.abs(r.y-y)<3);if(!r){r={y,a:[]};rows.push(r)}r.a.push({x:i.transform[4],s:i.str.trim()})}
+  rows.sort((a,b)=>b.y-a.y);for(const r of rows){r.a.sort((a,b)=>a.x-b.x);text+=r.a.map(i=>i.s).join(' ')+'\n'}}
+ return {text,imgs}}
+let REFMAP=LS.get('cpb_refmap',{});
+const DEC=/^\d{1,5}[.,]\d{2,4}$/,UNITS=/^(U|UN|UNI|PCE|PC|PCS|KG|COL|CT|CRT|X|L|BT|BTE|PQT|SAC|LOT|FD|EUR|€|HT|TTC)$/;
+// ligne produit, toutes factures : [réf] [EAN] désignation … quantités … PU … montant [TVA]
+function genLine(l,sup){let tk=l.split(' ').filter(Boolean);if(tk.length<3)return null;
+ if(/^(5[.,]5|5[.,]50|20|20[.,]00?|10|10[.,]00?|2[.,]1)%?$/.test(tk[tk.length-1])&&tk.filter(w=>DEC.test(w)).length>=3)tk.pop();while(tk.length&&/^(€|EUR|[A-D])$/i.test(tk[tk.length-1]))tk.pop();
+ const decs=tk.map((w,i)=>[w,i]).filter(([w])=>DEC.test(w));const em=l.match(/\b(\d{12,13}|\d{8})\b/);if(decs.length<2&&!(em&&decs.length))return null;
+ let i0=0,ref='';if(tk[0]&&/\d/.test(tk[0])&&/^[A-Z0-9][A-Z0-9.\-\/]{2,14}$/i.test(tk[0])&&!DEC.test(tk[0])&&!(em&&tk[0]===em[1])){ref=tk[0];i0=1}
+ let ean='';if(em){ean=em[1];const k=tk.indexOf(ean);if(k>=i0&&k<=i0+2)i0=k+1}
+ let last=-1;for(let i=i0;i<tk.length;i++)if(/[A-Za-zÀ-ÿ]{2,}/.test(tk[i])&&!UNITS.test(key(tk[i])))last=i;if(last<i0)return null;
+ const des=tk.slice(i0,last+1).join(' ').replace(/^[-*]+|[-*]+$/g,'').trim();if((des.match(/[A-Za-zÀ-ÿ]/g)||[]).length<4)return null;
+ const after=tk.slice(last+1),nums=after.filter(w=>DEC.test(w)).map(fixNum),ints=after.filter(w=>/^\d{1,4}$/.test(w)).map(Number);if(!nums.length)return null;
+ const mt=nums[nums.length-1];let pu=nums.length>1?nums[nums.length-2]:null;
+ for(const c of nums.slice(0,-1)){if(!c)continue;const q=mt/c;if(Math.abs(q-Math.round(q))<0.02&&Math.round(q)>=1&&(ints.includes(Math.round(q))||Math.round(q)===1)){pu=c;break}}
+ return {ref,ean,des,pu,mt}}
 function invDate(t){const m=t.match(/(\d{2})[\/-](\d{2})[\/-](20\d{2})/);return m?`${m[3]}-${m[2]}-${m[1]}`:today()}
 const EANS=()=>Object.keys(P);
 function fixEan(s){s=s.replace(/\D/g,'');if(P[s])return s;if(s.length===12){for(const e of EANS())if(e.length===13){for(let i=0;i<13;i++)if(e.slice(0,i)+e.slice(i+1)===s)return e}}return ''}
@@ -445,26 +471,25 @@ function parseInvoice(text){const sup=detectSupplier(text),date=invDate(text),ou
    let des=l.slice(0,ci).replace(/[|\]\[]/g,' ').replace(/\s1\s*$/,'').replace(/\s+/g,' ').trim();if(des.length<4)continue;const nums=(l.slice(ci).match(/[\dOo][\dOo.,|\]!:]*/g)||[]).map(fixNum).filter(x=>x!=null);
    const mt=nums.length?nums[nums.length-1]:null,pu=nums.length>1?nums[nums.length-2]:null;const k=autoIll(des);const egg=/OEUF/.test(u);
    const fe=egg?'':(flFiche(k)||fuzzy(des,true));const fk=fe?autoIll(P[fe].lib):'';const mul=/sac5$/.test(fk)?5:fk==='pdt_agria'?10:1;out.push({des:des+(mul>1&&pu!=null?` (PA du sac = ${String(pu).replace('.',',')} × ${mul} kg)`:''),ori:C2[cn]||'',pu:pu!=null?Math.round(pu*mul*100)/100:null,mt,ill:egg?'':k,e:fe,fl:!egg,act:{lab:!egg,pa:!egg&&!!fe}})}
-  else{const m=l.match(/\b(\d{12,13})\b/);let e=m?fixEan(m[1]):'';let des=l;if(m)des=l.slice(l.indexOf(m[1])+m[1].length).replace(/^\s*\d{6,7}\s*/,'');des=des.replace(/\s[\d.,]+\s.*$/,'').trim();
-   const validRaw=m&&m[1].length===13&&chk(m[1]);if(!e&&!validRaw){if(sup==='METRO'&&!m)continue;if(TOK(des).length<2)continue;e=fuzzy(des,false)}if(!e&&validRaw&&TOK(des).length<1)continue;const nums=(l.match(/\d+[.,]\d{2,3}/g)||[]).map(fixNum);
-   if(!e&&!validRaw&&!m&&sup!=='PROMOCASH'&&sup!=='AGIDRA')continue;const o=P[e];const fl=false;if(o&&isFL(o)&&sup!=='AGRIFRESH'){e='';}
-   out.push({des:des||l,ori:'',pu:nums[0]??null,mt:nums[nums.length-1]??null,ill:'',e,raw:m?m[1]:'',fl,act:{lab:!!e,pa:false}})}}
+  else{const g=genLine(l,sup);if(!g)continue;let e='',how='';const eg=g.ean?(P[g.ean]?g.ean:(P[g.ean.padStart(13,'0')]?g.ean.padStart(13,'0'):fixEan(g.ean))):'';
+   if(eg){e=eg;how='ean'}else if(g.ref&&REFMAP[sup+'|'+g.ref]&&P[REFMAP[sup+'|'+g.ref]]){e=REFMAP[sup+'|'+g.ref];how='ref'}else if(!g.ean){e=fuzzy(g.des,false);if(e)how='proche'}
+   const o=P[e];const fl=!!o&&isFL(o)&&sup==='AGRIFRESH';out.push({des:g.des,ref:g.ref,ori:'',pu:g.pu,mt:g.mt,ill:fl?autoIll(o.lib):'',e,how,raw:g.ean&&!eg?g.ean:'',fl,act:{lab:!!e&&how!=='proche',pa:false}})}}
  return {sup,date,lines:out}}
 let INV=null;
 function renderInv(){const box=$('#invRes');if(!INV){box.innerHTML='';return}const fl=INV.lines.filter(x=>x.fl).length;
- box.innerHTML=`<div class="card"><h2>${INV.sup} · facture du ${INV.date.split('-').reverse().join('/')} · ${INV.lines.length} lignes reconnues</h2><p class="mut">Vérifiez chaque ligne : la lecture d'une photo peut se tromper sur un chiffre. Le prix d'achat lu n'est utilisé que si vous cochez « PA ».</p>
- <div id="invList">${INV.lines.map((x,i)=>{const o=P[x.e];return `<div class="iline" data-i="${i}"><div class="il1">${x.scan?'<span class="pill p-ok">scanné</span> ':''}<b>${esc(x.des)}</b>${x.unk?` <span class="mut">${x.unk}</span>`:''}${x.ori?` <span class="pill p-ok">${esc(D.flags[x.ori]?D.flags[x.ori][1]:x.ori)}</span>`:''}</div>
- <div class="il2">${o?`→ ${esc(o.lib)} <span class="mut">${o.e}</span>`:'<span class="pill p-b">non trouvé en caisse</span>'} ${!o&&x.fl?'<button class="b2 iNew">Créer la fiche F&L</button>':''}<input type="text" class="iSearch" placeholder="autre produit (nom ou code)" style="width:190px"></div>
+ box.innerHTML=`<div class="card"><h2>${INV.sup} · facture du ${INV.date.split('-').reverse().join('/')} · ${INV.lines.length} lignes lues · ${INV.lines.filter(x=>P[x.e]).length} trouvées en caisse</h2><p class="mut">Vérifiez chaque ligne (une photo peut se tromper sur un chiffre). Les lignes « non trouvé » ou « à vérifier » : appuyez sur Scanner et scannez le produit, l'appli retiendra la référence fournisseur. Le prix d'achat lu n'est utilisé que si vous cochez « PA ».</p>
+ <div id="invList">${INV.lines.map((x,i)=>{const o=P[x.e];return `<div class="iline" data-i="${i}"><div class="il1">${x.scan?'<span class="pill p-ok">scanné</span> ':''}${x.ref?`<span class="mut">${esc(x.ref)}</span> `:''}<b>${esc(x.des)}</b>${x.unk?` <span class="mut">${x.unk}</span>`:''}${x.ori?` <span class="pill p-ok">${esc(D.flags[x.ori]?D.flags[x.ori][1]:x.ori)}</span>`:''}</div>
+ <div class="il2">${o?`→ ${esc(o.lib)} <span class="mut">${o.e}</span>${x.how==='proche'?' <b style="color:#c62828">à vérifier (nom proche)</b>':x.how==='ref'?' <span class="mut">(réf. connue)</span>':''}`:'<span class="pill p-b">non trouvé : scannez-le</span>'} ${!o&&x.fl?'<button class="b2 iNew">Créer la fiche F&L</button>':''}<input type="text" class="iSearch" placeholder="autre produit (nom ou code)" style="width:190px"></div>
  <div class="il3"><label>PA lu HT <input type="text" inputmode="decimal" class="iPa" value="${x.pu!=null?String(x.pu).replace('.',','):''}" style="width:70px"></label><span>PV actuel <b>${o&&o.prix!=null?fmt(o.prix)+' €':'–'}</b>${o&&o.prix!=null&&x.pu?` <span class="mut">(marge ${Math.round((1-x.pu/(o.prix/1.055))*100)} %)</span>`:''}</span><label>Nouveau PV <input type="text" inputmode="decimal" class="iPv" placeholder="TON PV" style="width:70px;background:#FFF9C4"></label><label><input type="checkbox" class="iLab" ${x.act.lab&&o?'checked':''}> étiquette</label><label><input type="checkbox" class="iPaC" ${x.act.pa&&o?'checked':''}> PA</label></div>${lineChecks(x).map(w=>`<div class="warnbox" style="margin:4px 0;padding:4px 8px">${esc(w)}</div>`).join('')}</div>`}).join('')}</div>
  <div class="row" style="margin-top:10px"><button class="b2 big" id="invScan">📷 Scanner les produits de la facture</button><button class="b2" id="invRep">Rapport de contrôle → Drive</button></div><div class="row" style="margin-top:10px"><button class="b y" id="invApply">Valider la facture</button><span class="mut">Ajoute les étiquettes à imprimer (gondole ou fruits et légumes), prépare l'import StorePOS (prix d'achat, nouveaux PV) et met à jour la saison des fruits et légumes (${fl} ligne(s) F&L).</span></div></div>`}
 function wireInv(){$('#invRes').addEventListener('change',e=>{const tr=e.target.closest('.iline');if(!tr||!INV)return;const x=INV.lines[+tr.dataset.i];if(e.target.classList.contains('iLab'))x.act.lab=e.target.checked;if(e.target.classList.contains('iPaC'))x.act.pa=e.target.checked;if(e.target.classList.contains('iPa'))x.pu=num(e.target.value);if(e.target.classList.contains('iPv'))x.pv=num(e.target.value);
- if(e.target.classList.contains('iSearch')){const v=e.target.value;const hit=fuzzy(v,false)||(P[eanStr(v)]?eanStr(v):'');if(hit){x.e=hit;x.fl=isFL(P[hit]);if(x.fl)x.ill=autoIll(P[hit].lib);renderInv()}else e.target.style.borderColor='#c62828'}});
+ if(e.target.classList.contains('iSearch')){const v=e.target.value;const hit=fuzzy(v,false)||(P[eanStr(v)]?eanStr(v):'');if(hit){x.e=hit;x.how='manuel';x.act.lab=true;x.fl=isFL(P[hit])&&INV.sup==='AGRIFRESH';if(x.fl)x.ill=autoIll(P[hit].lib);renderInv()}else e.target.style.borderColor='#c62828'}});
  $('#invRes').addEventListener('click',e=>{if(!e.target.classList.contains('iNew'))return;const x=INV.lines[+e.target.closest('.iline').dataset.i];openNewFL({lib:x.des,ill:x.ill,pa:x.pu,ori:x.ori,line:x})});}
-function applyInv(){if(!INV)return;let nl=0,nf=0,np=0;for(const x of INV.lines){const o=P[x.e];if(x.ill&&x.fl&&(!HIST[x.ill]||HIST[x.ill]<INV.date))HIST[x.ill]=INV.date;if(!o)continue;
+function applyInv(){if(!INV)return;let nl=0,nf=0,np=0;for(const x of INV.lines){if(x.ref&&P[x.e]&&INV.sup!=='AUTRE')REFMAP[INV.sup+'|'+x.ref]=x.e;const o=P[x.e];if(x.ill&&x.fl&&(!HIST[x.ill]||HIST[x.ill]<INV.date))HIST[x.ill]=INV.date;if(!o)continue;
   if(x.act.lab){if(x.fl){if(!SELF.includes(o.e))SELF.push(o.e);nf++;if(x.ori)setF(o.e,'ori',x.ori)}else{if(!SELG.includes(o.e))SELG.push(o.e);nl++}}
   if(x.act.pa&&x.pu!=null){CHG[o.e]=Object.assign(CHG[o.e]||{},{pa:x.pu,src:`${INV.sup} ${INV.date}`,date:today()});np++}
   if(x.pv!=null)setPrice(o.e,x.pv)}
- save();saveApp();updBadge();$('#invRes').innerHTML=`<div class="card"><h2>Facture validée</h2><p>${nl} étiquette(s) gondole et ${nf} affiche(s) F&L ajoutées · ${np} prix d'achat à importer.</p><div class="row"><button class="b2" onclick="goTab('t2')">Voir les étiquettes</button><button class="b2" onclick="goTab('t3')">Voir les affiches F&L</button><button class="b2" onclick="goTab('t6')">Import StorePOS</button></div></div>`;INV=null}
+ LS.set('cpb_refmap',REFMAP);save();saveApp();updBadge();$('#invRes').innerHTML=`<div class="card"><h2>Facture validée</h2><p>${nl} étiquette(s) gondole et ${nf} affiche(s) F&L ajoutées · ${np} prix d'achat à importer.</p><div class="row"><button class="b2" onclick="goTab('t2')">Voir les étiquettes</button><button class="b2" onclick="goTab('t3')">Voir les affiches F&L</button><button class="b2" onclick="goTab('t6')">Import StorePOS</button></div></div>`;INV=null}
 // ---------- création d'une fiche F&L (code interne 200000000NNN + clé) ----------
 function ean13(base12){let s=0;[...base12].forEach((d,i)=>s+=(+d)*(i%2?3:1));return base12+((10-s%10)%10)}
 function nextCode(){let mx=0;for(const e of Object.keys(P))if(/^200000000\d{4}$/.test(e))mx=Math.max(mx,+e.slice(9,12));for(const e of Object.keys(NEWF))mx=Math.max(mx,+e.slice(9,12));for(let n=mx+1;n<1000;n++){const c=ean13('200000000'+String(n).padStart(3,'0'));if(!P[c]&&!NEWF[c])return c}return ''}
@@ -538,12 +563,15 @@ async function driveUpload(name,blob,sub){const root=await gRoot();const par=sub
  const j=await (await gf(`https://www.googleapis.com/upload/drive/v3/files${ex?'/'+ex.id:''}?uploadType=multipart&fields=id,webViewLink`,{method:ex?'PATCH':'POST',body:fd})).json();return j.webViewLink}
 async function driveSync(){const st=$('#gStat');try{st.textContent='Synchronisation…';const root=await gRoot();const exp=await gFolder('EXPORTS STOREPOS',root);
  const j=await (await gf('https://www.googleapis.com/drive/v3/files?orderBy=modifiedTime desc&fields=files(id,name,modifiedTime)&q='+encodeURIComponent(`'${exp}' in parents and trashed=false`))).json();
- const fs=j.files.filter(f=>/\.(xlsx|csv)$/i.test(f.name));const fv=fs.find(f=>/vente/i.test(f.name)),fp=fs.find(f=>!/vente/i.test(f.name));
+ const fs=j.files.filter(f=>/\.(xlsx|csv)$/i.test(f.name));let fv=fs.find(f=>/vente/i.test(f.name)),fp=fs.find(f=>!/vente/i.test(f.name));
+ const q1=async q=>((await (await gf('https://www.googleapis.com/drive/v3/files?orderBy=modifiedTime desc&pageSize=10&fields=files(id,name,modifiedTime)&q='+encodeURIComponent(q+" and trashed=false and mimeType='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'"))).json()).files||[]);
+ if(!fp)fp=(await q1("name contains 'tous les produits'"))[0]||(await q1("name contains 'export_catalogue'")).find(f=>!/AGIDRA|METRO|AGRIFRESH|DCA|MONDIAL/i.test(f.name));
+ if(!fv)fv=(await q1("name contains 'Vente'"))[0];if(!fp)throw new Error('aucun export produits StorePOS trouvé : déposez-le dans APPLI ETIQUETTES CORBEILLE › EXPORTS STOREPOS');
  for(const [f,k] of [[fp,'base'],[fv,'ventes']])if(f&&(!META[k]||META[k].driveTime!==f.modifiedTime)){const b=await (await gf(`https://www.googleapis.com/drive/v3/files/${f.id}?alt=media`)).blob();await loadFile(new File([b],f.name),k);META[k].driveTime=f.modifiedTime;LS.set('cpb_meta',META)}
  const s=await gFind('reglages-appli.json',root);if(s){const r=await (await gf(`https://www.googleapis.com/drive/v3/files/${s.id}?alt=media`)).json();mergeSettings(r)}
- await driveUpload('reglages-appli.json',new Blob([JSON.stringify(allSettings())],{type:'application/json'}));applyChg();showSum();st.textContent='Synchronisé le '+new Date().toLocaleString('fr-FR');LS.set('cpb_lastsync',Date.now())}catch(e){st.textContent='Drive : '+e.message}}
-function allSettings(){return {v:1,names:SETN,fl:SETF,force:FORCE,hist:HIST,chg:CHG,newf:NEWF,done:DONE,map:MAP,seuil:+$('#seuil').value,at:Date.now()}}
-function mergeSettings(r){if(!r)return;Object.assign(SETN,r.names||{},SETN);for(const [e,v] of Object.entries(r.fl||{}))SETF[e]=Object.assign({},v,SETF[e]||{});for(const [k,d] of Object.entries(r.hist||{}))if(!HIST[k]||d>HIST[k])HIST[k]=d;
+ await driveUpload('reglages-appli.json',new Blob([JSON.stringify(allSettings())],{type:'application/json'}));applyChg();showSum();TOKIDX=null;baseWarn();st.textContent='Synchronisé le '+new Date().toLocaleString('fr-FR');LS.set('cpb_lastsync',Date.now())}catch(e){st.textContent='Drive : '+e.message}}
+function allSettings(){return {v:1,ref:REFMAP,names:SETN,fl:SETF,force:FORCE,hist:HIST,chg:CHG,newf:NEWF,done:DONE,map:MAP,seuil:+$('#seuil').value,at:Date.now()}}
+function mergeSettings(r){if(!r)return;REFMAP=Object.assign({},r.ref||{},REFMAP);LS.set('cpb_refmap',REFMAP);Object.assign(SETN,r.names||{},SETN);for(const [e,v] of Object.entries(r.fl||{}))SETF[e]=Object.assign({},v,SETF[e]||{});for(const [k,d] of Object.entries(r.hist||{}))if(!HIST[k]||d>HIST[k])HIST[k]=d;
  for(const [e,c] of Object.entries(r.chg||{}))if(!CHG[e]&&!DONE.some(x=>x.eans?.includes(e)))CHG[e]=c;for(const [e,f] of Object.entries(r.newf||{}))if(!NEWF[e]&&!P[e])NEWF[e]=f;const dn=new Set(DONE.map(d=>d.name));(r.done||[]).forEach(d=>{if(!dn.has(d.name))DONE.push(d)});save();saveApp()}
 let syncT;function queueSync(){clearTimeout(syncT);if(!TOKEN)return;syncT=setTimeout(()=>{if(navigator.onLine)driveUpload('reglages-appli.json',new Blob([JSON.stringify(allSettings())],{type:'application/json'})).catch(()=>{})},4000)}
 function goTab(t){document.querySelector(`nav button[data-t="${t}"]`).click()}
@@ -651,20 +679,35 @@ let ZX=null;
 function loadZX(){if(window.ZXing)return Promise.resolve();return new Promise((res,rej)=>{const s=document.createElement('script');s.src='https://cdn.jsdelivr.net/npm/@zxing/library@0.21.3/umd/index.min.js';s.onload=res;s.onerror=()=>rej(new Error('lecteur de codes-barres pas encore installé : ouvrez l\'appli une fois avec internet'));document.head.appendChild(s)})}
 let AC=null;function beep(ok=true){try{AC=AC||new (window.AudioContext||window.webkitAudioContext)();const o=AC.createOscillator(),g=AC.createGain();o.frequency.value=ok?1250:330;g.gain.value=.15;o.connect(g);g.connect(AC.destination);o.start();o.stop(AC.currentTime+(ok?.09:.25))}catch(e){}try{navigator.vibrate&&navigator.vibrate(ok?40:[60,40,60])}catch(e){}}
 // onCode(code) doit renvoyer {ok:bool, txt:string}
-function openScanner(title,onCode,onDone){let last='',lastT=0,reader=null,stream=null,stop=false;const seen=[];
- $('#modal').innerHTML=`<div class="mbox" style="max-width:520px"><h2>${esc(title)}</h2><div style="position:relative;background:#000;border-radius:10px;overflow:hidden;aspect-ratio:4/3"><video id="scV" playsinline muted style="width:100%;height:100%;object-fit:cover"></video><div style="position:absolute;left:10%;right:10%;top:45%;height:3px;background:#FFD400;box-shadow:0 0 8px #FFD400"></div></div>
- <div id="scMsg" class="mut" style="margin:6px 0">Visez le code-barres, il est lu tout seul. Douchette ou saisie : tapez le code puis Entrée.</div>
- <div class="row"><input type="text" id="scIn" inputmode="numeric" placeholder="code-barres" style="flex:1"><button class="b y" id="scEnd">Terminer</button></div><ol id="scList" style="max-height:30vh;overflow:auto;font-size:13px;padding-left:20px"></ol></div>`;$('#modal').style.display='flex';
- const add=c=>{c=eanStr(c);if(!c)return;const now=Date.now();if(c===last&&now-lastT<2500)return;last=c;lastT=now;const r=onCode(c)||{ok:true,txt:c};beep(r.ok);seen.push(c);$('#scList').insertAdjacentHTML('afterbegin',`<li style="color:${r.ok?'#111':'#c62828'}">${esc(r.txt)}</li>`);$('#scMsg').textContent=`${seen.length} code(s) scanné(s)`};
+function openScanner(title,onCode,onDone){let last='',lastT=0,stream=null,stop=false,mfr=null,torch=false;const seen=[];
+ if(!Object.keys(P).length){toast('Base produits vide : connectez-vous à Google (Réglages) pour la charger.');goTab('t1');return}
+ $('#modal').innerHTML=`<div class="mbox" style="max-width:520px"><h2>${esc(title)}</h2><div style="position:relative;background:#000;border-radius:10px;overflow:hidden;aspect-ratio:4/3"><video id="scV" playsinline muted autoplay style="width:100%;height:100%;object-fit:cover"></video><div style="position:absolute;left:8%;right:8%;top:32%;bottom:32%;border:3px solid #FFD400;border-radius:8px"></div></div>
+ <div id="scMsg" class="mut" style="margin:6px 0">Code-barres <b>à l'horizontale</b> dans le cadre jaune, à 15-20 cm. Il est lu tout seul.</div>
+ <div class="row"><button class="b2" id="scTorch" style="display:none">🔦 Lampe</button><label class="b2" style="cursor:pointer">📸 Photo du code<input type="file" id="scPh" accept="image/*" capture="environment" style="display:none"></label></div>
+ <div class="row" style="margin-top:6px"><input type="text" id="scIn" inputmode="numeric" placeholder="saisie ou douchette + Entrée" style="flex:1"><button class="b y" id="scEnd">Terminer</button></div><ol id="scList" style="max-height:26vh;overflow:auto;font-size:13px;padding-left:20px"></ol></div>`;$('#modal').style.display='flex';
+ const add=c=>{c=eanStr(c);if(!c)return false;if(c.length===12)c='0'+c;const now=Date.now();if(c===last&&now-lastT<2500)return true;last=c;lastT=now;const r=onCode(c)||{ok:true,txt:c};beep(r.ok);seen.push(c);$('#scList').insertAdjacentHTML('afterbegin',`<li style="color:${r.ok?'#111':'#c62828'}">${esc(r.txt)}</li>`);$('#scMsg').textContent=`${seen.length} code(s) scanné(s)`;return true};
  $('#scIn').onkeydown=e=>{if(e.key==='Enter'){add(e.target.value);e.target.value=''}};
- const end=()=>{stop=true;try{reader&&reader.reset()}catch(e){}try{stream&&stream.getTracks().forEach(t=>t.stop())}catch(e){}$('#modal').style.display='none';onDone&&onDone(seen)};$('#scEnd').onclick=end;
- (async()=>{const v=$('#scV');try{
-  if('BarcodeDetector' in window){const bd=new BarcodeDetector({formats:['ean_13','ean_8','upc_a']});stream=await navigator.mediaDevices.getUserMedia({video:{facingMode:'environment',width:{ideal:1280}}});v.srcObject=stream;await v.play();
-   const loop=async()=>{if(stop)return;try{const r=await bd.detect(v);if(r[0])add(r[0].rawValue)}catch(e){}setTimeout(loop,180)};loop();return}
-  await loadZX();const h=new Map();h.set(ZXing.DecodeHintType.POSSIBLE_FORMATS,[ZXing.BarcodeFormat.EAN_13,ZXing.BarcodeFormat.EAN_8,ZXing.BarcodeFormat.UPC_A]);h.set(ZXing.DecodeHintType.TRY_HARDER,true);
-  reader=new ZXing.BrowserMultiFormatReader(h,250);await reader.decodeFromConstraints({video:{facingMode:'environment',width:{ideal:1280}}},v,(res)=>{if(res&&!stop){let t=res.getText();if(t.length===12)t='0'+t;add(t)}})}
- catch(e){$('#scMsg').textContent='Caméra indisponible ('+e.message+'). Utilisez la saisie ou une douchette.'}})();
- setTimeout(()=>$('#scIn').focus(),300)}
+ const end=()=>{stop=true;try{stream&&stream.getTracks().forEach(t=>t.stop())}catch(e){}$('#modal').style.display='none';onDone&&onDone(seen)};$('#scEnd').onclick=end;
+ const BD=('BarcodeDetector' in window)?new BarcodeDetector({formats:['ean_13','ean_8','upc_a','upc_e']}):null;
+ const zx=async()=>{if(mfr)return mfr;await loadZX();const h=new Map();h.set(ZXing.DecodeHintType.POSSIBLE_FORMATS,[ZXing.BarcodeFormat.EAN_13,ZXing.BarcodeFormat.EAN_8,ZXing.BarcodeFormat.UPC_A,ZXing.BarcodeFormat.UPC_E]);h.set(ZXing.DecodeHintType.TRY_HARDER,true);mfr=new ZXing.MultiFormatReader();mfr.setHints(h);return mfr};
+ const dec=async c=>{if(BD){try{const r=await BD.detect(c);if(r[0])return r[0].rawValue}catch(e){}}const m=await zx();try{return m.decodeWithState(new ZXing.BinaryBitmap(new ZXing.HybridBinarizer(new ZXing.HTMLCanvasElementLuminanceSource(c)))).getText()}catch(e){return ''}};
+ const cv=document.createElement('canvas'),cx=cv.getContext('2d',{willReadFrequently:true});
+ const grab=(src,sw,sh,x,y,w,h,maxW)=>{const s=Math.min(1,maxW/w);cv.width=Math.round(w*s);cv.height=Math.round(h*s);cx.drawImage(src,x,y,w,h,0,0,cv.width,cv.height);return cv};
+ // photo : lecture d'une image pleine résolution (la plus fiable sur iPhone)
+ $('#scPh').onchange=async e=>{const f=e.target.files[0];e.target.value='';if(!f)return;$('#scMsg').textContent='Lecture de la photo…';try{const bm=await createImageBitmap(f);const W=bm.width,H=bm.height;let code='';
+  const tries=[[0,0,W,H,1600],[W*.1,H*.3,W*.8,H*.4,1600],[0,H*.2,W,H*.6,2000],[W*.2,H*.4,W*.6,H*.2,1400]];for(const [x,y,w,h,m] of tries){code=await dec(grab(bm,W,H,x,y,w,h,m));if(code)break}
+  if(!code){const r=document.createElement('canvas');const s=Math.min(1,1600/H);r.width=H*s;r.height=W*s;const rx=r.getContext('2d');rx.translate(r.width/2,r.height/2);rx.rotate(Math.PI/2);rx.drawImage(bm,-W*s/2,-H*s/2,W*s,H*s);code=await dec(r)}
+  if(!code||!add(code))$('#scMsg').textContent='Code non lu sur la photo : rapprochez-vous, code bien net et à plat.'}catch(x){$('#scMsg').textContent='Photo illisible : '+x.message}};
+ (async()=>{const v=$('#scV');try{if(!navigator.mediaDevices||!navigator.mediaDevices.getUserMedia)throw new Error('caméra non accessible dans ce navigateur');
+  if(!BD)await zx();
+  stream=await navigator.mediaDevices.getUserMedia({audio:false,video:{facingMode:{ideal:'environment'},width:{ideal:1920},height:{ideal:1080}}});v.srcObject=stream;await v.play();
+  const tr=stream.getVideoTracks()[0];try{const cap=tr.getCapabilities?tr.getCapabilities():{};const adv={};if(cap.focusMode&&cap.focusMode.includes('continuous'))adv.focusMode='continuous';if(cap.zoom&&cap.zoom.max>=1.6)adv.zoom=Math.min(cap.zoom.max,2);if(Object.keys(adv).length)await tr.applyConstraints({advanced:[adv]});
+   if(cap.torch){$('#scTorch').style.display='';$('#scTorch').onclick=()=>{torch=!torch;tr.applyConstraints({advanced:[{torch}]}).catch(()=>{})}}}catch(e){}
+  let n=0;const loop=async()=>{if(stop)return;const W=v.videoWidth,H=v.videoHeight;if(W&&H){n++;let c;
+    if(n%3)c=grab(v,W,H,W*.08,H*.32,W*.84,H*.36,1280);else c=grab(v,W,H,0,0,W,H,1100);const code=await dec(c);if(code)add(code)}
+   setTimeout(loop,90)};loop()}
+  catch(e){const why=/NotAllowed|Permission/i.test(e.name+e.message)?'accès à la caméra refusé : Réglages iPhone › Safari › Caméra › Autoriser':e.message;$('#scMsg').innerHTML='Caméra indisponible ('+esc(why)+'). Utilisez <b>📸 Photo du code</b>, la saisie ou une douchette.'}})();
+ }
 // ---- rapprochement facture ↔ scans ----
 const SUPK={AGRIFRESH:'AGRIFRESH',METRO:'METRO',PROMOCASH:'PROMOCASH',AGIDRA:'AGIDRA'};
 function lineChecks(x){const o=P[x.e];const w=[];if(!o||!INV)return w;
@@ -673,9 +716,9 @@ function lineChecks(x){const o=P[x.e];const w=[];if(!o||!INV)return w;
  if(o.prix!=null&&x.pu!=null){const tva=/TAUX NORMAL/.test(key(o.dep))?1.2:/INTERM/.test(key(o.dep))?1.1:1.055;const m=1-x.pu/(o.prix/tva);if(m<0.25)w.push(`marge ${Math.round(m*100)} % (< 25 %)`);if(o.prix/tva>x.pu*3)w.push('PV plus de 3 fois le PA : colis ou lot ? vérifier que c\'est la bonne fiche (unité)')}return w}
 function invScan(){if(!INV)return;openScanner('Scanner les produits de la facture',c=>{let e=P[c]?c:(P[c.padStart(13,'0')]?c.padStart(13,'0'):'');
   if(!e){const rl=INV.lines.find(x=>!x.e&&x.raw&&(x.raw===c||c.includes(x.raw)||x.raw.includes(c.slice(1))));if(rl){rl.scan=true;rl.unk=c;return {ok:false,txt:`${c} = « ${rl.des} » : code inconnu en caisse → fiche à créer`}}const ln=INV.lines.find(x=>x.unk===c);if(!ln)INV.lines.push({des:'Code scanné inconnu en caisse',ori:'',pu:null,mt:null,ill:'',e:'',unk:c,fl:false,act:{lab:false,pa:false},scan:true});return {ok:false,txt:`${c} : inconnu en caisse → fiche à créer`}}
-  let x=INV.lines.find(l=>l.e===e);if(x){x.scan=true;return {ok:true,txt:`✔ ${P[e].lib}`}}
+  let x=INV.lines.find(l=>l.e===e);if(x){x.scan=true;x.how='scan';x.act.lab=true;return {ok:true,txt:`✔ ${P[e].lib}`}}
   const free=INV.lines.filter(l=>!l.scan);let best=null,bs=0;const tk=new Set(TOK(P[e].lib));for(const l of free){const s=TOK(l.des).filter(w=>tk.has(w)).length;if(s>bs){bs=s;best=l}}
-  if(best&&bs>=1){best.e=e;best.scan=true;best.fl=isFL(P[e]);if(best.fl)best.ill=autoIll(P[e].lib);best.act.lab=true;return {ok:true,txt:`✔ ${P[e].lib} ↔ « ${best.des} »`}}
+  if(best&&bs>=1){best.e=e;best.how='scan';best.scan=true;best.fl=isFL(P[e]);if(best.fl)best.ill=autoIll(P[e].lib);best.act.lab=true;return {ok:true,txt:`✔ ${P[e].lib} ↔ « ${best.des} »`}}
   INV.lines.push({des:'Scanné, pas lu sur la photo',ori:'',pu:null,mt:null,ill:'',e,fl:isFL(P[e]),act:{lab:true,pa:false},scan:true});return {ok:true,txt:`+ ${P[e].lib} (non lu sur la photo)`}},()=>renderInv())}
 function controlReport(){if(!INV)return null;const rows=[['Fournisseur','Date facture','Ligne facture','Code-barres','Produit en caisse','Fournisseur en caisse','PA caisse','PA facture','PV','Alerte']];
  for(const x of INV.lines){const o=P[x.e];const w=lineChecks(x);if(x.unk&&!o)w.push('code inconnu en caisse : fiche à créer');if(!o&&!x.unk)w.push('ligne non rapprochée');if(!w.length)continue;rows.push([INV.sup,INV.date,x.des,x.e||x.unk||x.raw||'',o?o.lib:'',o?o.four||'':'',o?.pa0??'',x.pu??'',o?.prix??'',w.join(' ; ')])}return rows.length>1?rows:null}
@@ -683,6 +726,16 @@ function controlReport(){if(!INV)return null;const rows=[['Fournisseur','Date fa
 // --- câblage des nouveaux écrans ---
 async function runOcr(files){INV=null;let txt='';const pr=$('#invProg');try{for(let i=0;i<files.length;i++){pr.textContent=`Lecture de la photo ${i+1}/${files.length}… (la première fois, préparation du moteur : 10-20 s)`;txt+='\n'+await ocrImage(files[i],p=>pr.textContent=`Lecture de la photo ${i+1}/${files.length} : ${p} %`)}
  pr.textContent='';$('#invTxt').value=txt.trim();INV=parseInvoice(txt);if(!INV.lines.length){pr.textContent='Aucune ligne de produit reconnue : reprenez la photo plus nette, ou ouvrez « Coller le texte » pour corriger.';$('#invTxtBox').style.display='block'}renderInv()}catch(e){pr.textContent='Erreur : '+e.message}}
+async function runPdf(files){INV=null;const pr=$('#invProg');try{let txt='',imgs=[];for(const f of files){if(/pdf/i.test(f.type)||/\.pdf$/i.test(f.name)){pr.textContent='Lecture du PDF…';const r=await pdfRead(f);txt+='\n'+r.text;imgs.push(...r.imgs)}else imgs.push(f)}
+ for(let i=0;i<imgs.length;i++){pr.textContent=`Page scannée ${i+1}/${imgs.length} : lecture optique…`;txt+='\n'+await ocrImage(imgs[i],p=>pr.textContent=`Page scannée ${i+1}/${imgs.length} : ${p} %`)}
+ pr.textContent='';$('#invTxt').value=txt.trim();INV=parseInvoice(txt);if(!INV.lines.length){pr.textContent='Aucune ligne de produit reconnue dans ce document. Envoyez-le à Claude pour adapter la lecture à ce fournisseur.';$('#invTxtBox').style.display='block'}renderInv()}catch(e){pr.textContent='Erreur : '+e.message}}
+$('#invPdf').onchange=e=>{if(e.target.files.length)runPdf([...e.target.files]);e.target.value=''};
+$('#invDrive').onclick=async()=>{const pr=$('#invProg');try{pr.textContent='Recherche des factures sur le Drive…';const j=await (await gf('https://www.googleapis.com/drive/v3/files?orderBy=modifiedTime desc&pageSize=40&fields=files(id,name,modifiedTime)&q='+encodeURIComponent("mimeType='application/pdf' and trashed=false"))).json();pr.textContent='';
+ const fs=(j.files||[]).sort((a,b)=>(/FACT/i.test(b.name)-/FACT/i.test(a.name))||(b.modifiedTime>a.modifiedTime?1:-1)).slice(0,25);
+ $('#modal').innerHTML=`<div class="mbox"><h2>Factures récentes du Drive</h2><div style="max-height:60vh;overflow:auto">${fs.map(f=>`<button class="b2 dInv" data-id="${f.id}" data-n="${esc(f.name)}" style="display:block;width:100%;text-align:left;margin:4px 0">${esc(f.name)}<div class="mut">${new Date(f.modifiedTime).toLocaleDateString('fr-FR')}</div></button>`).join('')||'<p class="mut">Aucun PDF trouvé.</p>'}</div><button class="b2" id="dX" style="margin-top:8px">Fermer</button></div>`;$('#modal').style.display='flex';$('#dX').onclick=()=>$('#modal').style.display='none';
+ document.querySelectorAll('.dInv').forEach(b=>b.onclick=async()=>{$('#modal').style.display='none';pr.textContent='Téléchargement…';const bl=await (await gf(`https://www.googleapis.com/drive/v3/files/${b.dataset.id}?alt=media`)).blob();runPdf([new File([bl],b.dataset.n,{type:'application/pdf'})])})}catch(e){pr.textContent='Drive : '+e.message+' (connectez-vous dans Réglages)'}};
+function baseWarn(){$('#baseWarn').style.display=Object.keys(P).length?'none':'block'}
+$('#baseGo').onclick=async()=>{goTab('t1');try{await gToken(true);await driveSync()}catch(e){$('#gStat').textContent='Google : '+e.message}};
 $('#invPhoto').onchange=e=>{if(e.target.files.length)runOcr([...e.target.files]);e.target.value=''};$('#invPick').onchange=e=>{if(e.target.files.length)runOcr([...e.target.files]);e.target.value=''};
 $('#invTxtB').onclick=()=>{$('#invTxtBox').style.display=$('#invTxtBox').style.display==='none'?'block':'none'};$('#invParse').onclick=()=>{INV=parseInvoice($('#invTxt').value);renderInv()};
 wireInv();$('#invRes').addEventListener('click',e=>{if(e.target.id==='invApply')applyInv()});
@@ -703,7 +756,7 @@ $('#gConn').onclick=async()=>{LS.set('cpb_cid',$('#gCid').value.trim());try{awai
 const _exp=$('#expSet').onclick;$('#expSet').onclick=()=>dl('reglages-etiquettes-corbeille.json',new Blob([JSON.stringify(allSettings(),null,1)],{type:'application/json'}));
 $('#setIn').onchange=async e=>{const f=e.target.files[0];if(!f)return;try{const j=JSON.parse(await f.text());mergeSettings(j);if(j.map)MAP=j.map;showMap();$('#stSet').textContent='Réglages importés.'}catch(x){$('#stSet').textContent='Fichier illisible.'}};
 if('serviceWorker' in navigator&&(location.protocol==='https:'||location.hostname==='localhost'))navigator.serviceWorker.register('sw.js').catch(()=>{});
-applyChg();updBadge();showSum();
+applyChg();updBadge();showSum();baseWarn();
 </script>
 </body>
 </html>
