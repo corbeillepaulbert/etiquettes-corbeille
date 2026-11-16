@@ -116,7 +116,7 @@ nav button{white-space:nowrap}
 <section id="t1">
   <div class="card">
     <h2>Importer mes fichiers StorePOS</h2>
-    <p class="mut">Tout reste sur cet ordinateur : rien n'est envoyé sur internet. Formats : Excel (.xlsx) ou CSV.</p>
+    <p class="mut">Formats : Excel (.xlsx) ou CSV. Après l'import, l'appli propose de <b>ranger le fichier sur le Drive</b> : il est renommé et placé dans « EXPORTS STOREPOS », l'ancien part dans « ANCIENS ». Les autres téléphones prennent le nouveau fichier à leur prochaine ouverture.</p>
     <div class="row" style="align-items:stretch">
       <div class="drop" id="dropBase" style="flex:1"><b>Fichier produits (export PLU / « tous les produits »)</b><br><span class="mut">colonnes CODEBAR, LIBELLE, PRIX1, Département</span><br><span id="stBase" class="mut">Aucun fichier</span></div>
       <div class="drop" id="dropVentes" style="flex:1"><b>Fichier ventes 12 mois (optionnel)</b><br><span class="mut">colonnes Code / EAN, Qté vendue — sert au repérage Top Vente</span><br><span id="stVentes" class="mut">Aucun fichier</span></div>
@@ -295,12 +295,46 @@ async function loadFile(file,kind){const ab=await file.arrayBuffer();let rows;
  Object.values(P).forEach(o=>delete o.seenV);
  META[kind]={name:file.name,n,date:new Date().toLocaleString('fr-FR')};if(kind==='ventes'){const m=file.name.match(/(\d{2})[_.-](\d{2})[_.-](\d{2,4})[_ .-]+(?:au[_ .-]+)?(\d{2})[_.-](\d{2})[_.-](\d{2,4})/i);const Y=y=>y.length===2?'20'+y:y;let days=365,from='',to='';if(m){from=`${Y(m[3])}-${m[2]}-${m[1]}`;to=`${Y(m[6])}-${m[5]}-${m[4]}`;const d=(new Date(to)-new Date(from))/864e5+1;if(d>6&&d<2000)days=Math.round(d)}META.ventes.days=days;META.ventes.from=from;META.ventes.to=to}TOKIDX=null;REFDB=null;
  for(const [e,c] of Object.entries(CHG)){if(P[e]&&c.prix!=null&&P[e].prix0!=null&&Math.abs(P[e].prix0-c.prix)<0.005){delete c.prix;if(!Object.keys(c).filter(k=>!['src','date'].includes(k)).length)delete CHG[e]}}
- for(const e of Object.keys(NEWF))if(P[e]&&P[e].fromBase)delete NEWF[e];applyChg();LS.set('cpb_meta',META);LS.set('cpb_products',P);if(typeof saveApp==='function')saveApp();showSum()}
+ for(const e of Object.keys(NEWF))if(P[e]&&P[e].fromBase)delete NEWF[e];applyChg();LS.set('cpb_meta',META);LS.set('cpb_products',P);if(typeof saveApp==='function')saveApp();showSum();return n}
 function showSum(){const all=Object.values(P);$('#stBase').textContent=META.base?`${META.base.name} · ${META.base.n} lignes · ${META.base.date}`:'Aucun fichier';$('#stVentes').textContent=META.ventes?`${META.ventes.name} · ${META.ventes.n} lignes · ${META.ventes.date}`:'Aucun fichier';
  const s=+$('#seuil').value||365;const top=all.filter(o=>(o.q||0)>=s).length;$('#sum').innerHTML=all.length?`<b>${all.length}</b> produits chargés · <b>${all.filter(o=>o.prix!=null).length}</b> avec prix · <b>${top}</b> Top Vente (≥ ${s} ventes)`:'';$('#seuilTxt').textContent=s}
 let curKind='base';
-for(const [id,k] of [['#dropBase','base'],['#dropVentes','ventes']]){const d=$(id);d.onclick=()=>{curKind=k;$('#fileIn').click()};d.ondragover=e=>{e.preventDefault();d.classList.add('hov')};d.ondragleave=()=>d.classList.remove('hov');d.ondrop=e=>{e.preventDefault();d.classList.remove('hov');if(e.dataTransfer.files[0])loadFile(e.dataTransfer.files[0],k)}}
-$('#fileIn').onchange=e=>{if(e.target.files[0])loadFile(e.target.files[0],curKind);e.target.value=''};
+for(const [id,k] of [['#dropBase','base'],['#dropVentes','ventes']]){const d=$(id);d.onclick=()=>{curKind=k;$('#fileIn').click()};d.ondragover=e=>{e.preventDefault();d.classList.add('hov')};d.ondragleave=()=>d.classList.remove('hov');d.ondrop=e=>{e.preventDefault();d.classList.remove('hov');if(e.dataTransfer.files[0])importLocal(e.dataTransfer.files[0],k)}}
+$('#fileIn').onchange=e=>{if(e.target.files[0])importLocal(e.target.files[0],curKind);e.target.value=''};
+// ---- rangement automatique des exports StorePOS sur le Drive ----
+const IDB=()=>new Promise((res,rej)=>{const r=indexedDB.open('cpb',1);r.onupgradeneeded=()=>r.result.createObjectStore('kv');r.onsuccess=()=>res(r.result);r.onerror=()=>rej(r.error)});
+async function idbSet(k,v){const db=await IDB();return new Promise(r=>{const t=db.transaction('kv','readwrite');v===undefined?t.objectStore('kv').delete(k):t.objectStore('kv').put(v,k);t.oncomplete=()=>r()})}
+async function idbGet(k){const db=await IDB();return new Promise(r=>{const q=db.transaction('kv').objectStore('kv').get(k);q.onsuccess=()=>r(q.result);q.onerror=()=>r(undefined)})}
+const XLSXT='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
+const d2=d=>{const [y,m,j]=d.split('-');return `${j}_${m}_${y.slice(2)}`};
+const isoD=d=>d.toISOString().slice(0,10);
+async function importLocal(file,kind){const n=await loadFile(file,kind);if(n)offerDrive(file,kind)}
+function expName(kind,ext,from,to){return kind==='ventes'?`VENTES PLU du ${d2(from)} au ${d2(to)}.${ext}`:`PRODUITS STOREPOS ${d2(isoD(new Date()))}.${ext}`}
+function offerDrive(file,kind){const ext=(file.name.match(/\.(\w+)$/)||[,'xlsx'])[1].toLowerCase();const v=kind==='ventes';
+ let from=META.ventes?.from||'',to=META.ventes?.to||'';if(v&&!from){const t=new Date();to=isoD(t);t.setFullYear(t.getFullYear()-1);t.setDate(t.getDate()+1);from=isoD(t)}
+ $('#modal').innerHTML=`<div class="mbox"><h2>Ranger ce fichier sur le Drive ?</h2><p class="mut">Fichier importé : ${esc(file.name)}</p>
+ ${v?`<p><b>Période des ventes</b> (sert au calcul des moyennes)</p><div class="row"><label>du <input type="date" id="odF" value="${from}" style="font-size:18px"></label><label>au <input type="date" id="odT" value="${to}" style="font-size:18px"></label></div>`:''}
+ <p><b>Nouveau nom</b></p><input type="text" id="odN" value="${esc(expName(kind,ext,from,to))}" style="width:100%;font-size:17px">
+ <p class="mut">Rangé dans « ${ROOTNAME} › EXPORTS STOREPOS ». L'ancien ${v?'fichier de ventes':'fichier produits'} est déplacé dans « EXPORTS STOREPOS › ANCIENS » (rien n'est supprimé).</p>
+ <div class="row"><button class="b y big" id="odOk">Oui, ranger sur le Drive</button><button class="b2 big" id="odNo">Non merci</button></div><p id="odSt" class="mut"></p></div>`;$('#modal').style.display='flex';
+ if(v)['#odF','#odT'].forEach(i=>$(i).onchange=()=>{if($('#odF').value&&$('#odT').value)$('#odN').value=expName(kind,ext,$('#odF').value,$('#odT').value)});
+ $('#odNo').onclick=()=>{$('#modal').style.display='none'};
+ $('#odOk').onclick=async()=>{let name=$('#odN').value.trim()||file.name;if(!new RegExp('\\.'+ext+'$','i').test(name))name+='.'+ext;
+  if(v){const f=$('#odF').value,t=$('#odT').value;if(f&&t&&t>=f){META.ventes.from=f;META.ventes.to=t;META.ventes.days=Math.round((new Date(t)-new Date(f))/864e5)+1;LS.set('cpb_meta',META)}}
+  const blob=new Blob([await file.arrayBuffer()],{type:ext==='xlsx'?XLSXT:'text/csv'});
+  if(!TOKEN||Date.now()>=TOKEXP){if(!navigator.onLine){$('#odSt').textContent='Pas de connexion internet : le fichier est bien importé sur ce téléphone, rangez-le plus tard en le réimportant.';return}
+   await idbSet('pendingExport',{kind,name,blob});$('#odSt').textContent='Connexion à Google… le rangement reprendra tout seul au retour.';gAuth(false);return}
+  $('#odOk').disabled=true;$('#odSt').textContent='Envoi sur le Drive…';try{const r=await storeExport(kind,name,blob);$('#odSt').innerHTML=`✔ Rangé : <b>${esc(name)}</b>${r.moved?` · ${r.moved} ancien(s) fichier(s) déplacé(s) dans ANCIENS`:''}`;$('#odOk').style.display='none';$('#odNo').textContent='Fermer'}
+  catch(e){$('#odOk').disabled=false;$('#odSt').textContent='Drive : '+e.message+' — le fichier reste importé sur ce téléphone.'}}}
+async function storeExport(kind,name,blob){const root=await gRoot();const exp=await gFolder('EXPORTS STOREPOS',root);const v=kind==='ventes';
+ const j=await (await gf('https://www.googleapis.com/drive/v3/files?fields=files(id,name)&pageSize=100&q='+encodeURIComponent(`'${exp}' in parents and trashed=false and mimeType!='application/vnd.google-apps.folder'`))).json();
+ const old=(j.files||[]).filter(f=>/\.(xlsx|csv)$/i.test(f.name)&&(/vente|plu/i.test(f.name)===v));
+ const same=old.find(f=>f.name===name);const fd=new FormData();fd.append('metadata',new Blob([JSON.stringify(same?{name}:{name,parents:[exp]})],{type:'application/json'}));fd.append('file',blob);
+ const up=await (await gf(`https://www.googleapis.com/upload/drive/v3/files${same?'/'+same.id:''}?uploadType=multipart&fields=id,modifiedTime`,{method:same?'PATCH':'POST',body:fd})).json();
+ let moved=0;const others=old.filter(f=>f.id!==up.id);if(others.length){const anc=await gFolder('ANCIENS',exp);for(const f of others){await gf(`https://www.googleapis.com/drive/v3/files/${f.id}?addParents=${anc}&removeParents=${exp}&fields=id`,{method:'PATCH'});moved++}}
+ if(META[kind]){META[kind].driveTime=up.modifiedTime;META[kind].name=name;LS.set('cpb_meta',META);showSum()}return {moved}}
+async function resumeExport(){let p;try{p=await idbGet('pendingExport')}catch(e){return}if(!p||!TOKEN)return;await idbSet('pendingExport',undefined);
+ try{const r=await storeExport(p.kind,p.name,p.blob);toast(`Fichier rangé sur le Drive : ${p.name}${r.moved?` (${r.moved} ancien(s) dans ANCIENS)`:''}`)}catch(e){toast('Rangement Drive impossible : '+e.message)}}
 $('#seuil').onchange=()=>{LS.set('cpb_seuil',+$('#seuil').value);showSum()};$('#seuil').value=LS.get('cpb_seuil',365);
 $('#expSet').onclick=()=>{const b=new Blob([JSON.stringify({names:SETN,fl:SETF,force:FORCE,seuil:+$('#seuil').value},null,1)],{type:'application/json'});const a=document.createElement('a');a.href=URL.createObjectURL(b);a.download='reglages-etiquettes-corbeille.json';a.click()};
 $('#impSet').onclick=()=>$('#setIn').click();$('#setIn').onchange=async e=>{const f=e.target.files[0];if(!f)return;try{const j=JSON.parse(await f.text());Object.assign(SETN,j.names||{});Object.assign(SETF,j.fl||{});Object.assign(FORCE,j.force||{});if(j.seuil)$('#seuil').value=j.seuil;save();$('#stSet').textContent='Réglages importés.'}catch(x){$('#stSet').textContent='Fichier illisible.'}};
@@ -859,6 +893,7 @@ $('#baseGo').onclick=()=>gAuth(false);$('#wGo').onclick=()=>{try{gAuth(false)}ca
 async function boot(){const r=gReturn();const online=navigator.onLine;const valid=TOKEN&&Date.now()<TOKEXP;
  if(r&&r!=='ok'&&LS.get('cpb_authT',0)&&r!=='interaction_required'&&r!=='login_required'&&r!=='consent_required')$('#wMsg').textContent='Google a refusé la connexion : '+r;
  if(valid){$('#gStat').textContent='Connecté à Google Drive';try{const a=await (await gf('https://www.googleapis.com/drive/v3/about?fields=user(emailAddress)')).json();if(a.user)LS.set('cpb_gmail',a.user.emailAddress)}catch(e){}
+  if(online)await resumeExport();
   if(online&&Date.now()-LS.get('cpb_lastsync',0)>5*60*1000)driveSync();return}
  if(online&&LS.get('cpb_everConn',0)&&!LS.get('cpb_needLogin',0)&&Date.now()-LS.get('cpb_authT',0)>60*1000){try{return gAuth(true)}catch(e){}}
  if(!LS.get('cpb_everConn',0)||LS.get('cpb_needLogin',0)){if(Date.now()-LS.get('cpb_skipT',0)>12*3600*1000||!Object.keys(P).length)$('#welcome').style.display='block'}}
