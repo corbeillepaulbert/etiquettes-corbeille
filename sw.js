@@ -1,5 +1,5 @@
 // Service worker : l'appli et le moteur de lecture restent disponibles sans internet
-const V='cpb-v11';
+const V='cpb-v12';
 const CORE=['./','index.html','manifest.json','icon-180.png','icon-192.png','icon-512.png','tessdata/fra.traineddata.gz','lib/pdf.min.mjs','lib/pdf.worker.min.mjs'];
 const CDN=['https://cdn.jsdelivr.net/npm/@zxing/library@0.21.3/umd/index.min.js','https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js','https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/worker.min.js','https://cdn.jsdelivr.net/npm/tesseract.js-core@5/tesseract-core-simd-lstm.wasm.js','https://cdn.jsdelivr.net/npm/tesseract.js-core@5/tesseract-core-lstm.wasm.js'];
 self.addEventListener('install',e=>{e.waitUntil(caches.open(V).then(async c=>{await c.addAll(CORE);for(const u of CDN){try{await c.add(new Request(u,{mode:'cors'}))}catch(x){}}}).then(()=>self.skipWaiting()))});
