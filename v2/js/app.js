@@ -6,6 +6,9 @@ import { icone } from './icones.js';
 import { ouvrirScanner, ecouterDouchette, bip } from './moteur/scan.js';
 import { lire, ecrire } from './donnees.js';
 import { chargerEtiquettes, actionEtiquettes } from './etiquettes.js';
+import { filtrer } from './fournisseurs.js';
+import { chercher } from './recherche.js';
+import { chargerFacture, actionFacture, brancherFacture } from './facture.js';
 import { chargerConfig, estRelie, relier, delier, aTraiterEnCache, majATraiter, rafraichirMaintenant, marquerTraite, prendreExports, synchroniserListe } from './drive.js';
 
 const app = document.getElementById('app');
@@ -16,7 +19,14 @@ let ecranCourant = 'accueil';
 let cacheAT = { derniere: null, elements: [] };
 let nomAppareil = '';
 const heure = iso => iso ? new Date(iso).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' }) : '';
-const nouveaux = () => (cacheAT.elements || []).filter(x => x.etat === 'nouveau').length;
+let dernierJournal = '';
+/** Éléments de À traiter, filtrés sur les fournisseurs de la caisse. Le journal sort dans la console à chaque changement. */
+function vueAT() {
+  const f = filtrer(cacheAT.elements || [], etat.produits);
+  if (f.journal !== dernierJournal) { dernierJournal = f.journal; console.info(f.journal); }
+  return f;
+}
+const nouveaux = () => vueAT().gardes.filter(x => x.etat === 'nouveau').length;
 
 const meta = () => ({ jours: joursVentes() });
 const dateDuJour = () => new Date().toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long' }).replace(/^./, c => c.toUpperCase());
@@ -37,26 +47,42 @@ function accueil() {
   courant = null;
   afficher(ecranAccueil({
     bonjour: 'Bonjour', date: dateDuJour(), aTraiter: nouveaux(), donnees: resumeDonnees(),
-    petites: [['etiquettes', 'imprimer', 'Étiquettes'], ['liste', 'achat', `Ma liste d'achat${etat.liste.length ? ` (${etat.liste.length})` : ''}`]],
+    petites: [['etiquettes', 'imprimer', 'Étiquettes'], ['factures', 'facture', 'Travailler une facture'], ['liste', 'achat', `Ma liste d'achat${etat.liste.length ? ` (${etat.liste.length})` : ''}`]],
     liens: [['donnees', 'Mettre à jour les ventes'], ['reglages', 'Réglages']]
   }), 'accueil');
 }
 
-/** Ouvrir Magasin ou Achat : la dernière fiche consultée, jamais la caméra d'office. */
+/** Ouvrir Magasin ou Achat : une recherche par nom, la dernière fiche et le bouton Scanner. La caméra ne s'allume jamais d'office. */
 async function ouvrirMode(m) {
-  mode = m;
+  mode = m; courant = null;
   const dernier = await lire(m === 'achat' ? 'dernierAchat' : 'dernierMagasin', '');
   const p = dernier && trouver(dernier);
-  if (p) return fiche(p);
+  const vide = !Object.keys(etat.produits).length;
   afficher(`<div class="scr cb">${barreMode(m, '', true)}
   <div class="scr__corps">
     <h1 class="titre-1">${m === 'achat' ? 'Achat' : 'Magasin'}</h1>
-    <div class="carte"><div class="titre-2">${m === 'achat' ? 'Combien en prendre ?' : 'Prix, ventes, marge.'}</div>
-    <div class="note" style="margin-top:8px">${m === 'achat' ? 'Scanne un produit pour voir combien il en part et combien en prendre.' : 'Scanne un produit pour voir son prix en caisse, ses ventes et sa marge.'}</div></div>
-    ${m === 'achat' ? `<button class="ligne" data-action="liste" style="border:0;font:inherit;text-align:left;width:100%"><div class="ligne__ico">${icone('achat')}</div><div class="ligne__txt"><div class="ligne__titre">Ma liste d'achat</div><div class="ligne__detail">${etat.liste.length} produit${etat.liste.length > 1 ? 's' : ''}</div></div>${icone('chevron', 'cb-ico cb-ico--24')}</button>` : ''}
+    <input id="rech" class="champ" type="search" inputmode="search" enterkeyhint="search" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="Chercher un produit par son nom" aria-label="Chercher un produit par son nom"${vide ? ' disabled' : ''}>
+    <div id="rech-res" aria-live="polite"></div>
+    <div id="rech-repos">
+    ${vide ? `<div class="carte"><div class="titre-2">Aucun produit chargé.</div><div class="note" style="margin-top:8px">Touche « Mettre à jour les ventes » sur l'accueil.</div></div>` : ''}
+    ${p ? `<button class="ligne" data-action="ouvrir-fiche" data-e="${esc(p.e)}" style="border:0;font:inherit;text-align:left;width:100%"><div class="ligne__ico">${icone(m)}</div><div class="ligne__txt"><div class="ligne__titre">${esc(joli(p.lib))}</div><div class="ligne__detail">Dernière fiche · ${euros(p.prix)}</div></div></button>` : ''}
+    ${m === 'achat' ? `<button class="ligne" data-action="liste" style="border:0;font:inherit;text-align:left;width:100%"><div class="ligne__ico">${icone('achat')}</div><div class="ligne__txt"><div class="ligne__titre">Ma liste d'achat</div><div class="ligne__detail">${etat.liste.length ? etat.liste.length + ' produit(s)' : 'Vide pour l\'instant'}</div></div></button>` : ''}
+    </div>
   </div>
   <div class="scr__bas"><button class="btn btn--principal${m === 'achat' ? ' btn--achat' : ''}" data-action="scanner">${icone('scan')}Scanner un produit</button></div></div>`, m);
 }
+
+app.addEventListener('input', e => {
+  if (e.target.id !== 'rech') return;
+  const zone = app.querySelector('#rech-res'), repos = app.querySelector('#rech-repos');
+  const q = e.target.value.trim();
+  if (q.length < 2) { zone.innerHTML = ''; repos.hidden = false; return; }
+  repos.hidden = true;
+  const r = chercher(q, etat.produits);
+  zone.innerHTML = r.length
+    ? r.map(o => `<button class="ligne" data-action="ouvrir-fiche" data-e="${esc(o.e)}" style="border:0;font:inherit;text-align:left;width:100%"><div class="ligne__txt"><div class="ligne__titre">${esc(joli(o.lib))}</div><div class="ligne__detail">${o.prix != null ? euros(o.prix) : 'Prix à définir'}${o.q != null ? ' · ' + (o.q >= 1 ? Math.round(o.q) + ' vendus' : 'pas vendu') : ''}</div></div></button>`).join('')
+    : `<div class="carte"><div class="titre-2">Aucun produit « ${esc(q)} ».</div><div class="note" style="margin-top:8px">Essaie un seul mot, ou scanne le code-barres.</div></div>`;
+});
 
 function eclair(type, nom, info, detail, ensuite) {
   const d = document.createElement('div');
@@ -181,7 +207,7 @@ function aTraiter(message = '') {
       <div class="scr__bas"><button class="btn btn--principal" data-action="reglages">Ouvrir les réglages</button></div></div>`, 'atraiter');
     return;
   }
-  const el = cacheAT.elements || [];
+  const vue = vueAT(), el = vue.gardes;
   const nouv = el.filter(x => x.etat === 'nouveau'), faits = el.filter(x => x.etat === 'traite').slice(0, 10);
   const ligne = x => `<div class="ligne"><a class="ligne__ico" href="${esc(x.url)}" target="_blank" rel="noopener" aria-label="Ouvrir dans le Drive" style="text-decoration:none">${icone('facture')}</a>
     <a class="ligne__txt" href="${esc(x.url)}" target="_blank" rel="noopener" style="text-decoration:none;color:inherit"><div class="ligne__titre">${esc(x.nom)}</div><div class="ligne__detail">${esc(x.dossier || 'FACTURES ACHAT')} · ${new Date(x.cree).toLocaleDateString('fr-FR', { day: 'numeric', month: 'short' })}${x.etat === 'traite' && x.traitePar ? ` · traitée par ${esc(x.traitePar)}` : ''}</div></a>
@@ -190,6 +216,8 @@ function aTraiter(message = '') {
   <div class="scr__corps">
     <div class="accueil__haut"><h1 class="titre-1">À traiter</h1>${nouv.length ? `<span class="compteur">${nouv.length}</span>` : ''}</div>
     <div class="note" data-verif>${cacheAT.derniere ? `Drive vérifié à ${heure(cacheAT.derniere)}` : 'Pas encore vérifié'}${cacheAT.recu ? ` · reçu à ${heure(cacheAT.recu)}` : ''}</div>
+    ${vue.masques.length ? `<details class="note"><summary style="min-height:48px;display:flex;align-items:center">${vue.masques.length} facture(s) masquée(s) : fournisseur absent de StorePOS</summary>${vue.masques.slice(0, 15).map(x => `<div>${esc(x.nom)}</div>`).join('')}</details>` : ''}
+    ${!vue.actif ? `<div class="note">Filtre fournisseurs inactif : charge d'abord les produits.</div>` : ''}
     ${message ? `<div class="bandeau bandeau--alerte">${icone('info', 'cb-ico cb-ico--24')}<span>${esc(message)}</span></div>` : ''}
     ${nouv.length ? nouv.map(ligne).join('') : `<div class="carte"><div class="titre-2">Rien à traiter.</div><div class="note" style="margin-top:8px">Les nouvelles factures du dossier FACTURES ACHAT arrivent ici toutes seules, toutes les 15 minutes.</div></div>`}
     ${faits.length ? `<h2 class="titre-3" style="margin-top:8px">Déjà traitées</h2>${faits.map(ligne).join('')}` : ''}
@@ -223,12 +251,13 @@ app.addEventListener('click', async e => {
   const b = e.target.closest('[data-action]'); if (!b) return;
   const a = b.dataset.action;
   if (await actionEtiquettes(a, b, nav)) return;
+  if (await actionFacture(a, b, nav)) return;
   if (a === 'accueil') return accueil();
   if (a === 'mode') { if (b.dataset.mode === 'inventaire') return pasEncore('inventaire'); return ouvrirMode(b.dataset.mode); }
+  if (a === 'ouvrir-fiche') { const p = trouver(b.dataset.e); return p && fiche(p); }
   if (a === 'scanner') return scanner(mode);
   if (a === 'scanner-achat') return scanner('achat');
   if (a === 'donnees') return donnees();
-  if (a === 'factures') return pasEncore('factures');
   if (a === 'liste') { liste(); return syncFond(true); }
   if (a === 'reglages') return reglages();
   if (a === 'a-traiter') return aTraiter();
@@ -291,6 +320,8 @@ app.addEventListener('click', async e => {
   }
 });
 
+brancherFacture(app, nav);
+
 ecouterDouchette(code => { if (!document.querySelector('.scan-plein')) resultat(code); });
 
 // ---------- synchronisation en fond ----------
@@ -322,6 +353,7 @@ document.addEventListener('visibilitychange', () => { if (document.visibilitySta
   await charger();
   await chargerConfig();
   await chargerEtiquettes();
+  await chargerFacture();
   cacheAT = await aTraiterEnCache();
   nomAppareil = await lire('nomAppareil', '');
   accueil();

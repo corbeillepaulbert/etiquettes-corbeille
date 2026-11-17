@@ -25,7 +25,6 @@ export function ecranAccueil({ bonjour = 'Bonjour', date = '', aTraiter = 0, don
     ${date ? `<div class="note" style="margin-top:-12px">${esc(date)}</div>` : ''}
     <button class="tuile tuile--magasin" data-action="mode" data-mode="magasin">${icone('magasin')}<div><b>Magasin</b><span>Prix, ventes, étiquettes</span></div></button>
     <button class="tuile tuile--achat" data-action="mode" data-mode="achat">${icone('achat')}<div><b>Achat</b><span>Combien en prendre, et pourquoi</span></div></button>
-    <button class="tuile tuile--inventaire" data-action="mode" data-mode="inventaire">${icone('inventaire')}<div><b>Inventaire</b><span>Compter une zone</span></div></button>
     <div class="duo">
       ${petites.map(([a, i, t]) => `<button class="tuile tuile--petite" data-action="${a}">${icone(i)}<b>${t}</b></button>`).join('')}
     </div>

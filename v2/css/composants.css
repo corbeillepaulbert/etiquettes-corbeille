@@ -139,3 +139,16 @@ html,body{margin:0;background:var(--papier)}
 .recherche-res{display:grid;gap:var(--espace-2)}
 .ligne--tap{cursor:pointer}
 .feuille-saisie--dedans{position:static;box-shadow:none;padding:0;border-radius:0}
+
+/* Lot 2c : écran facture */
+.fac-ligne{display:grid;gap:var(--espace-3)}
+.fac-t{font:600 18px/26px var(--font-texte);word-break:break-word}
+.fac-prod{font:600 18px/26px var(--font-texte);color:var(--corbeille)}
+.fac-grille{display:grid;grid-template-columns:1fr 1fr;gap:var(--espace-3)}
+.fac-cell{background:var(--papier);border-radius:var(--rayon-m);padding:var(--espace-3);display:grid;gap:var(--espace-1);align-content:start;min-width:0}
+.fac-l{font:600 18px/22px var(--font-texte);color:var(--encre-2)}
+.fac-v{font:700 22px/28px var(--font-titre)}
+.fac-s{font:600 18px/22px var(--font-texte);color:var(--encre-2)}
+.fac-champ{min-height:var(--cible-min);font-size:22px;padding:0 var(--espace-3)}
+.fac-btn{min-height:var(--cible-min);margin-top:var(--espace-1)}
+.duo>:last-child:nth-child(odd){grid-column:1/-1}

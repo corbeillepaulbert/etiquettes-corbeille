@@ -34,6 +34,7 @@ Appli de La Corbeille Paul Bert. Deux versions cohabitent sur le même site GitH
 ### Dossier FACTURES ACHAT : lecture seule absolue
 - Le script **lit** FACTURES ACHAT et ses sous-dossiers : il **ne déplace rien, ne renomme rien, ne supprime rien, n'écrit rien** dans ce dossier.
 - Appels autorisés sur ce dossier et son contenu : `getFolderById`, `getFoldersByName`, `getFolders`, `getFiles`, `searchFiles`, `getName`, `getId`, `getDateCreated`, `getLastUpdated`, `getMimeType`, `getSize`, `getBlob`.
+- Lecture d'une facture à la demande (actions `factures` et `facture`) : parcours par `getFolders`/`getFiles`, contenu par `getBlob`, rien d'autre. Un identifiant hors de FACTURES ACHAT est refusé.
 - Même règle pour EXPORTS STOREPOS : le script n'y fait que lister et lire les fichiers posés directement dans le dossier (pas ANCIENS).
 - Appels interdits : `moveTo`, `setName`, `setTrashed`, `createFile`, `createFolder`, `addFile`, `removeFile`, `setDescription`, `setSharing`, `setStarred`, et toute écriture équivalente via l'API Drive avancée.
 - Les données de la V2 vivent dans un dossier à part, `APPLI V2`. Dext et l'expert-comptable continuent sans intervention.
