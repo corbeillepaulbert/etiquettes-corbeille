@@ -56,14 +56,19 @@ export function ecranFactureAccueil({ relie, enCours, message = '' }) {
 
 export function ecranListeFactures({ titre, factures, message = '' }) {
   const L = fournisseursCaisse();
-  const lignes = factures.map(f => {
-    const four = fournisseurDe(f, L);
-    return `<button class="ligne" data-action="fac-ouvrir" data-id="${esc(f.id)}" style="border:0;font:inherit;text-align:left;width:100%"><div class="ligne__ico">${icone('facture')}</div><div class="ligne__txt"><div class="ligne__titre">${esc(four || f.nom)}</div><div class="ligne__detail">${esc(f.nom.slice(0, 10))} · ${esc(f.nom.replace(/^\d{4}-\d{2}-\d{2}_/, '').slice(0, 48))}</div></div></button>`;
-  }).join('');
+  const jour = d => d ? d.split('-').reverse().slice(0, 2).join('/') : '';
+  const ligne = (f, four) => `<button class="ligne" data-action="fac-ouvrir" data-id="${esc(f.id)}" style="border:0;font:inherit;text-align:left;width:100%"><div class="ligne__ico">${icone('facture')}</div><div class="ligne__txt"><div class="ligne__titre">${esc(jour(f.date))} · ${esc(four || f.nom)}</div><div class="ligne__detail">${esc(f.nom.replace(/^\d{4}-\d{2}-\d{2}_/, '').slice(0, 56))}</div></div></button>`;
+  // groupes par fournisseur (déjà triés du plus récent au plus ancien) ; ceux à une seule facture vont ensemble à la suite
+  const groupes = new Map();
+  for (const f of factures) { const four = fournisseurDe(f, L) || 'Autre'; if (!groupes.has(four)) groupes.set(four, []); groupes.get(four).push(f); }
+  const multi = [...groupes].filter(([, v]) => v.length > 1), seuls = [...groupes].filter(([, v]) => v.length === 1).flatMap(([k, v]) => v.map(f => [k, f])).sort((a, b) => b[1].date.localeCompare(a[1].date));
+  const corps = (multi.map(([k, v]) => `<h2 class="titre-3">${esc(k)} · ${v.length} factures</h2>${v.map(f => ligne(f, k)).join('')}`).join('') +
+    (seuls.length ? `${multi.length ? '<h2 class="titre-3">Une seule facture</h2>' : ''}${seuls.map(([k, f]) => ligne(f, k)).join('')}` : ''));
   return `<div class="scr cb">${barre('Facture')}
   <div class="scr__corps"><h1 class="titre-1">${esc(titre)}</h1>
+    <div class="note">${factures.length} facture(s) des 90 derniers jours, la plus récente en haut.</div>
     ${message ? `<div class="bandeau bandeau--alerte">${icone('info', 'cb-ico cb-ico--24')}<span>${esc(message)}</span></div>` : ''}
-    ${lignes || `<div class="carte"><div class="titre-2">Aucune facture trouvée.</div></div>`}
+    ${corps || `<div class="carte"><div class="titre-2">Aucune facture sur 90 jours.</div></div>`}
   </div><div class="scr__bas"><button class="btn btn--discret" data-action="fac-accueil">Retour</button></div></div>`;
 }
 
@@ -154,8 +159,8 @@ export async function actionFacture(a, b, nav) {
     const nom = a === 'fac-four' ? b.dataset.nom : '';
     nav.afficher(ecranLecture(nom ? `Factures ${nom} dans le Drive…` : 'Dernières factures dans le Drive…'), 'facture-lecture');
     try {
-      let liste = await facturesDrive(nom ? nom.split(/[\s,.-]+/)[0] : '', nom ? 40 : 100);
-      if (!nom) { const L = fournisseursCaisse(); if (L.length) liste = liste.filter(f => fournisseurDe(f, L)).slice(0, 40); }
+      let liste = await facturesDrive(nom ? nom.split(/[\s,.-]+/)[0] : '');
+      if (!nom) { const L = fournisseursCaisse(); if (L.length) liste = liste.filter(f => fournisseurDe(f, L)); }
       nav.afficher(ecranListeFactures({ titre: nom || 'Dernières factures', factures: liste }), 'facture-liste');
     } catch (x) { accueil(`Impossible de lire le Drive : ${x.message}.`); }
     return true;

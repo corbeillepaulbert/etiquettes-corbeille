@@ -46,7 +46,7 @@ function doPost(e) {
       case 'traiter': return repondre({ ok: true, ...marquer(req.id, req.etat, req.par) });
       case 'exports': return repondre({ ok: true, fichiers: listerExports() });
       case 'fichier': return repondre({ ok: true, ...lireExport(req.id) });
-      case 'factures': return repondre({ ok: true, factures: listerFactures(req.mot, req.max) });
+      case 'factures': return repondre({ ok: true, factures: listerFactures(req.mot, req.max, req.jours) });
       case 'facture': return repondre({ ok: true, ...lireFacture(req.id) });
       case 'lire': return repondre({ ok: true, ...lireDoc(req.doc) });
       case 'ecrire': return repondre(ecrireDoc(req.doc, req.valeur, req.version));
@@ -221,19 +221,30 @@ function parcourirFactures(visiteur) {
   marche(dossierFactures(), '', 0);
 }
 
-/** Les factures les plus récentes (nom commençant par la date), filtrées par un mot du nom ou du dossier. */
-function listerFactures(mot, max) {
+/** Date d'une facture, comme dans la V1 : la dernière date AAAA-MM-JJ du nom, sinon la date de création. */
+function dateFacture(f, nom) {
+  const m = String(nom).match(/20\d{2}[-_.]\d{2}[-_.]\d{2}/g);
+  if (m) return m[m.length - 1].replace(/[_.]/g, '-');
+  return f.getDateCreated().toISOString().slice(0, 10);
+}
+
+/** Les factures des `jours` derniers jours (90 par défaut), les plus récentes d'abord, filtrées par un mot du nom ou du dossier.
+ *  Le tri et le filtre se font ici : le Drive entier ne transite jamais vers l'appli. */
+function listerFactures(mot, max, jours) {
   const m = String(mot || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
+  const limite = new Date(Date.now() - (Number(jours) || 90) * 864e5).toISOString().slice(0, 10);
   const out = [];
   parcourirFactures((f, chemin) => {
     const nom = f.getName();
     if (!EXTENSIONS_FACTURE.test(nom)) return true;
+    const date = dateFacture(f, nom);
+    if (date < limite) return true;
     if (m && (nom + chemin).toUpperCase().replace(/[^A-Z0-9]/g, '').indexOf(m) < 0) return true;
-    out.push({ id: f.getId(), nom, dossier: chemin, cree: f.getDateCreated().toISOString(), taille: f.getSize() });
+    out.push({ id: f.getId(), nom, dossier: chemin, date });
     return true;
   });
-  out.sort((a, b) => b.nom.localeCompare(a.nom));
-  return out.slice(0, Math.min(Number(max) || 40, 100));
+  out.sort((a, b) => b.date.localeCompare(a.date) || b.nom.localeCompare(a.nom));
+  return out.slice(0, Math.min(Number(max) || 150, 300));
 }
 
 /** Contenu d'une facture de FACTURES ACHAT (lecture seule : getBlob). Un identifiant hors de ce dossier est refusé. */

@@ -102,8 +102,8 @@ export async function synchroniserListe() {
 
 // ---------- factures du Drive (lecture seule) ----------
 /** Les factures les plus récentes de FACTURES ACHAT, éventuellement celles d'un fournisseur. */
-export async function facturesDrive(mot = '', max = 40) {
-  const r = await appel('factures', { mot, max }); if (!r.ok) throw new Error(r.erreur || 'refusé (le script du Drive est-il à jour ?)');
+export async function facturesDrive(mot = '', max = 150, jours = 90) {
+  const r = await appel('factures', { mot, max, jours }); if (!r.ok) throw new Error(r.erreur || 'refusé (le script du Drive est-il à jour ?)');
   return r.factures;
 }
 /** Le fichier d'une facture, lu sans rien modifier dans le Drive. */
