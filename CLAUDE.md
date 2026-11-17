@@ -52,7 +52,8 @@ Appli de La Corbeille Paul Bert. Deux versions cohabitent sur le même site GitH
 ## Code de la V2
 
 - HTML, CSS et JavaScript sans framework ni étape de construction. Modules ES dans `v2/js/`, petits fichiers.
-- `v2/js/moteur/` : code repris **à l'identique** de la V1 (lecture Excel, scan). Ne pas le réécrire : le scan est validé sur l'iPhone 13 mini du gérant.
+- `v2/js/moteur/` : code repris **à l'identique** de la V1 (lecture Excel, scan, étiquettes épicerie et PDF). Ne pas le réécrire : le scan est validé sur l'iPhone 13 mini du gérant, et la planche V2 doit rester identique au pixel près à celle de la V1 (même police InterE, `v2/fonts/`).
+- **Le scan est toujours une action explicite.** Ouvrir un mode ou un écran montre l'état de la tâche (dernière fiche, planche en cours, file d'attente) avec un bouton Scanner ; la caméra ne s'allume jamais d'office.
 - Écrans dans `v2/js/ecrans.js` : les mêmes fonctions servent à l'appli et au teaser (`v2/teaser/`).
 - Couleurs, tailles et espacements : uniquement les variables de `v2/css/tokens.css`, générées depuis le système graphique « Corbeille V2 ». Texte de 18 px minimum sur iPhone et iPad, cibles de 48 px minimum (56 px pour l'action principale).
 - Vocabulaire de l'interface : français simple, tutoiement, verbes d'action (« Scanner », « Ajouter à ma liste »), jamais « OK » seul.

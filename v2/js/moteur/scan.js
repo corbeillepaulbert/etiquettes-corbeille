@@ -62,15 +62,17 @@ export function normaliserCode(c) {
  * Ouvre le scanner plein écran. onCode(code) est appelé une fois par code lu ; le scanner se ferme alors.
  * Renvoie une fonction fermer().
  */
-export function ouvrirScanner({ mode = 'magasin', qui = '', onCode, onFermer }) {
+export function ouvrirScanner({ mode = 'magasin', qui = '', onCode, onFermer, continu = false, titre = '' }) {
   let stream = null, stop = false, torch = false, fini = false;
+  let dernier = '', dernierT = 0, nbLus = 0;
   const el = document.createElement('div');
   el.className = 'scan-plein cb';
   el.innerHTML = `
     <video playsinline muted></video>
     ${barreMode(mode, qui, true)}
     <div class="scan-cadre"></div>
-    <div class="scan-aide" data-msg>Approche le code du cadre</div>
+    <div class="scan-aide" data-msg>${titre || 'Approche le code du cadre'}</div>
+    ${continu ? '<div class="scan-continu"><div class="scan-continu__liste" data-liste></div><button class="btn btn--principal" data-t="fini">Terminé</button></div>' : ''}
     <div class="scan-outils">
       <button class="btn" data-t="lampe" hidden>${icone('lampe', 'cb-ico cb-ico--24')}Lampe</button>
       <label class="btn">${icone('photo', 'cb-ico cb-ico--24')}Photo<input type="file" accept="image/*" capture="environment" hidden></label>
@@ -86,19 +88,34 @@ export function ouvrirScanner({ mode = 'magasin', qui = '', onCode, onFermer }) 
     el.remove();
     if (code) onCode(code); else onFermer && onFermer();
   };
-  const lu = (c) => { c = normaliserCode(c); if (!c) return false; fermer(c); return true; };
+  const lu = (c) => {
+    c = normaliserCode(c); if (!c) return false;
+    if (!continu) { fermer(c); return true; }
+    // scan en continu (étiquettes) : même code ignoré pendant 2,5 s, comme dans la V1
+    const now = Date.now();
+    if (c === dernier && now - dernierT < 2500) return true;
+    dernier = c; dernierT = now;
+    const r = onCode(c) || { ok: true, txt: c };
+    bip(r.ok); nbLus++;
+    const l = el.querySelector('[data-liste]');
+    l.insertAdjacentHTML('afterbegin', `<div class="scan-continu__ligne${r.ok ? '' : ' scan-continu__ligne--ko'}">${r.txt}</div>`);
+    msg(`${nbLus} code${nbLus > 1 ? 's' : ''} lu${nbLus > 1 ? 's' : ''} · continue ou touche Terminé`);
+    const f = el.querySelector('.feuille-saisie input'); if (f) { f.value = ''; f.focus(); }
+    return true;
+  };
 
   el.querySelector('.mode__fermer').onclick = () => fermer();
+  if (continu) el.querySelector('[data-t="fini"]').onclick = () => fermer();
 
   // saisie au clavier
   el.querySelector('[data-t="taper"]').onclick = () => {
     if (el.querySelector('.feuille-saisie')) return;
     const f = document.createElement('div');
-    f.className = 'feuille-saisie';
+    f.className = continu ? 'feuille-saisie feuille-saisie--dedans' : 'feuille-saisie';
     f.innerHTML = `<div class="titre-3">Taper le code-barres</div>
       <input class="champ" inputmode="numeric" pattern="[0-9]*" autocomplete="off" placeholder="13 chiffres">
       <button class="btn btn--principal">Valider le code</button>`;
-    el.appendChild(f);
+    if (continu) el.querySelector('.scan-continu').prepend(f); else el.appendChild(f);
     const i = f.querySelector('input'); i.focus();
     const ok = () => { if (!lu(i.value)) i.focus(); };
     f.querySelector('button').onclick = ok;
@@ -149,7 +166,7 @@ export function ouvrirScanner({ mode = 'magasin', qui = '', onCode, onFermer }) 
           n++; let c;
           if (n % 3) c = grab(v, W, H, W * .08, H * .32, W * .84, H * .36, 1280); else c = grab(v, W, H, 0, 0, W, H, 1100);
           const code = await dec(c);
-          if (code && lu(code)) return;
+          if (code && lu(code) && !continu) return;
         }
         setTimeout(loop, 90);
       };

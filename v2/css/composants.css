@@ -126,3 +126,16 @@ html,body{margin:0;background:var(--papier)}
 .achat__reglage{margin-left:auto;display:flex;gap:var(--espace-2);align-self:center}
 .achat__reglage .btn--geste{background:var(--carte)}
 [hidden]{display:none!important}
+/* scan en continu (étiquettes) */
+.scan-continu{position:absolute;left:0;right:0;bottom:0;z-index:2;background:var(--carte);border-radius:var(--rayon-l) var(--rayon-l) 0 0;padding:var(--espace-3) var(--espace-4) calc(var(--espace-4) + env(safe-area-inset-bottom));display:grid;gap:var(--espace-3);box-shadow:var(--ombre-feuille)}
+.scan-continu__liste{max-height:132px;overflow-y:auto;display:grid;gap:4px}
+.scan-continu__ligne{font:600 18px/24px var(--font-texte);color:var(--succes)}
+.scan-continu__ligne--ko{color:var(--erreur)}
+.scan-plein:has(.scan-continu) .scan-outils{bottom:calc(240px + env(safe-area-inset-bottom))}
+@font-face{font-family:'InterE';font-weight:900;src:url(../fonts/InterE-900.woff) format('woff')}
+@font-face{font-family:'InterE';font-weight:700;src:url(../fonts/InterE-700.woff) format('woff')}
+/* étiquettes */
+.apercu-etiq{width:100%;height:auto;display:block;border-radius:6px;box-shadow:var(--ombre-carte);background:#fff}
+.recherche-res{display:grid;gap:var(--espace-2)}
+.ligne--tap{cursor:pointer}
+.feuille-saisie--dedans{position:static;box-shadow:none;padding:0;border-radius:0}
