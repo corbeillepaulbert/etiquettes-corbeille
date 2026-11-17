@@ -79,6 +79,7 @@ export async function importerFichier(file, origine = {}) {
   const cA = findCol(h, ["Prix d'achat HT", 'Prix achat']);
   const cT = findCol(h, ['TAUX TVA', 'TVA']);
   const cFo = h.findIndex(x => /^FOURNISSEURACTIF$|^FOURNISSEUR$/.test(norm(x)));
+  const cRf = h.findIndex(x => /^REFFOURNISSEUR$/.test(norm(x)));
   const P = { ...etat.produits };
   const vus = new Set();
   let n = 0;
@@ -96,6 +97,7 @@ export async function importerFichier(file, origine = {}) {
       if (cA >= 0) o.pa0 = num(r[cA]);
       if (cT >= 0) { const t = num(r[cT]); if (t != null) o.tva = t; }
       if (cFo >= 0) o.four = String(r[cFo] ?? '').replace(/^nan$/, '').trim();
+      if (cRf >= 0) o.reff = String(r[cRf] ?? '').replace(/^nan$/, '').trim();
     } else {
       const q = num(r[cQ]) || 0;
       o.q = (vus.has(e) ? (o.q || 0) : 0) + q; vus.add(e);
@@ -109,7 +111,7 @@ export async function importerFichier(file, origine = {}) {
     // les produits absents du nouveau fichier n'ont pas vendu sur la période
     for (const e of Object.keys(P)) if (!vus.has(e)) P[e] = { ...P[e], q: 0 };
   }
-  const meta = { ...etat.meta, [type]: { nom: file.name, lignes: n, date: new Date().toISOString(), ...origine, ...(type === 'ventes' ? periodeDepuisNom(file.name) : {}) } };
+  const meta = { ...etat.meta, [type]: { nom: file.name, lignes: n, v: 2, date: new Date().toISOString(), ...origine, ...(type === 'ventes' ? periodeDepuisNom(file.name) : {}) } };
   await ecrire('produits', P); await ecrire('meta', meta);
   etat.produits = P; etat.meta = meta;
   try { navigator.storage && navigator.storage.persist && navigator.storage.persist(); } catch (e) { }
@@ -125,7 +127,7 @@ export async function reprendreV1() {
   const M1 = JSON.parse(localStorage.getItem('cpb_meta') || '{}');
   const P = {};
   for (const [e, o] of Object.entries(P1)) {
-    P[e] = { e, lib: o.lib, prix: o.prix0 ?? o.prix ?? null, dep: o.dep || '', ray: o.ray || '', fam: o.fam || '', pa0: o.pa0 ?? null, four: o.four || '', q: typeof o.q === 'number' ? o.q : null, base: o.fromBase ? 1 : 0 };
+    P[e] = { e, lib: o.lib, prix: o.prix0 ?? o.prix ?? null, dep: o.dep || '', ray: o.ray || '', fam: o.fam || '', pa0: o.pa0 ?? null, four: o.four || '', reff: o.reff || '', q: typeof o.q === 'number' ? o.q : null, base: o.fromBase ? 1 : 0 };
   }
   const meta = {
     base: M1.base ? { nom: M1.base.name, lignes: M1.base.n, date: new Date().toISOString(), source: 'V1' } : undefined,

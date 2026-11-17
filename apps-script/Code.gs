@@ -20,7 +20,7 @@
  *  - Le secret n'apparaît jamais dans un journal ni dans une réponse.
  */
 
-const VERSION = 1;
+const VERSION = 2;
 const NOM_FACTURES = 'FACTURES ACHAT';
 const NOM_EXPORTS = 'EXPORTS STOREPOS';
 const NOM_APPLI = 'APPLI ETIQUETTES CORBEILLE';
@@ -46,6 +46,8 @@ function doPost(e) {
       case 'traiter': return repondre({ ok: true, ...marquer(req.id, req.etat, req.par) });
       case 'exports': return repondre({ ok: true, fichiers: listerExports() });
       case 'fichier': return repondre({ ok: true, ...lireExport(req.id) });
+      case 'factures': return repondre({ ok: true, factures: listerFactures(req.mot, req.max) });
+      case 'facture': return repondre({ ok: true, ...lireFacture(req.id) });
       case 'lire': return repondre({ ok: true, ...lireDoc(req.doc) });
       case 'ecrire': return repondre(ecrireDoc(req.doc, req.valeur, req.version));
       default: return repondre({ ok: false, erreur: 'action inconnue' });
@@ -202,6 +204,45 @@ function marquer(id, etatVoulu, par) {
     }
     return lireATraiter();
   } finally { verrou.releaseLock(); }
+}
+
+// ---------------------------------------------------------------- lecture d'une facture (lecture seule)
+
+/** Parcourt FACTURES ACHAT et ses sous-dossiers (getFolders / getFiles uniquement) ; `visiteur` reçoit chaque fichier. */
+function parcourirFactures(visiteur) {
+  const marche = (d, chemin, prof) => {
+    const fi = d.getFiles();
+    while (fi.hasNext()) { if (visiteur(fi.next(), chemin) === false) return false; }
+    if (prof >= 4) return true;
+    const sous = d.getFolders();
+    while (sous.hasNext()) { const s = sous.next(); if (marche(s, chemin ? chemin + ' › ' + s.getName() : s.getName(), prof + 1) === false) return false; }
+    return true;
+  };
+  marche(dossierFactures(), '', 0);
+}
+
+/** Les factures les plus récentes (nom commençant par la date), filtrées par un mot du nom ou du dossier. */
+function listerFactures(mot, max) {
+  const m = String(mot || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
+  const out = [];
+  parcourirFactures((f, chemin) => {
+    const nom = f.getName();
+    if (!EXTENSIONS_FACTURE.test(nom)) return true;
+    if (m && (nom + chemin).toUpperCase().replace(/[^A-Z0-9]/g, '').indexOf(m) < 0) return true;
+    out.push({ id: f.getId(), nom, dossier: chemin, cree: f.getDateCreated().toISOString(), taille: f.getSize() });
+    return true;
+  });
+  out.sort((a, b) => b.nom.localeCompare(a.nom));
+  return out.slice(0, Math.min(Number(max) || 40, 100));
+}
+
+/** Contenu d'une facture de FACTURES ACHAT (lecture seule : getBlob). Un identifiant hors de ce dossier est refusé. */
+function lireFacture(id) {
+  let trouve = null;
+  parcourirFactures(f => { if (f.getId() === id) { trouve = f; return false; } return true; });
+  if (!trouve) throw new Error('facture non autorisée');
+  if (trouve.getSize() > 20 * 1024 * 1024) throw new Error('fichier trop gros');
+  return { nom: trouve.getName(), type: trouve.getMimeType(), base64: Utilities.base64Encode(trouve.getBlob().getBytes()) };
 }
 
 // ---------------------------------------------------------------- exports StorePOS (lecture seule)
