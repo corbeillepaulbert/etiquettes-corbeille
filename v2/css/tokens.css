@@ -1,0 +1,46 @@
+/* Corbeille V2 — variables générées depuis le système graphique (tokens.json). Ne pas modifier à la main. */
+:root{
+  --papier:#F7F4EE;
+  --carte:#FFFFFF;
+  --encre:#16140F;
+  --encre-2:#4B463D;
+  --trait:#E3DDD2;
+  --trait-controle:#857E72;
+  --corbeille:#14532F;
+  --corbeille-clair:#E3F0E8;
+  --achat:#1A4593;
+  --achat-clair:#E4ECF8;
+  --inventaire:#6E3A05;
+  --inventaire-clair:#F6EBDD;
+  --abricot:#E9893F;
+  --succes:#0F5A2F;
+  --succes-fond:#DDF3E4;
+  --succes-vif:#3CC872;
+  --alerte:#6E4600;
+  --alerte-fond:#FFF0C7;
+  --alerte-vif:#F5B84A;
+  --erreur:#8E1A12;
+  --erreur-fond:#FDE7E4;
+  --erreur-vif:#F2867A;
+  --voile:#16140F80;
+  --espace-1:4px;
+  --espace-2:8px;
+  --espace-3:12px;
+  --espace-4:16px;
+  --espace-5:24px;
+  --espace-6:32px;
+  --espace-7:48px;
+  --rayon-s:8px;
+  --rayon-m:14px;
+  --rayon-l:22px;
+  --rayon-plein:999px;
+  --cible-min:48px;
+  --cible-principale:56px;
+  --cible-geste:64px;
+  --cible-scan:72px;
+  --ombre-carte:0 1px 2px #16140F14, 0 4px 12px #16140F0F;
+  --ombre-feuille:0 -8px 24px #16140F1F;
+  --ombre-scan:0 6px 16px #14532F40;
+  --font-titre:ui-rounded,"SF Pro Rounded","Inter Display",system-ui,sans-serif;
+  --font-texte:-apple-system,"SF Pro Text",system-ui,Inter,"Helvetica Neue",Arial,sans-serif;
+}

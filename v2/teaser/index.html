@@ -1,0 +1,44 @@
+<!DOCTYPE html>
+<html lang="fr"><head><meta charset="utf-8"><meta name="viewport" content="width=1080">
+<title>Corbeille — l'appli du magasin</title>
+<link rel="stylesheet" href="../css/tokens.css"><link rel="stylesheet" href="../css/composants.css"><link rel="stylesheet" href="teaser.css">
+</head><body><div id="pages"></div>
+<script type="module">
+import { ecranAccueil, ecranEclair, ecranFicheMagasin, ecranFicheAchat, barreMode, carteMagasin, blocVentes } from '../js/ecrans.js';
+import { icone } from '../js/icones.js';
+import { calculAchat, euros, marge } from '../js/calcul.js';
+import { META, AYRAN_1L, YAOURT_1KG, AYRAN_25 } from './donnees-exemple.js';
+const R = { semaines: 1, seuilTop: 365 };
+const etat = (blanc) => `<div class="etat${blanc ? ' etat--blanc' : ''}"><span>8:47</span><i></i></div>`;
+const tel = (html, fond = '') => `<div class="tel tel--page"><div class="tel__ecran" style="${fond}">${etat()}${html}</div></div>`;
+const page = (n, titre, phrase, corps) => `<section class="page"><div class="marque"><i></i>Corbeille</div><div class="num">${n} / 6</div><div class="entete"><h1 class="titre">${titre}</h1><p class="phrase">${phrase}</p></div>${corps}</section>`;
+const ipad = () => {
+  const p = YAOURT_1KG, c = calculAchat(p, META, R);
+  const lignes = [
+    ['facture', 'Facture Globalfood du 14/11', '31 lignes', '<span class="pastille pastille--alerte">2 à vérifier</span>'],
+    ['achat', 'Liste d’achat', '12 produits notés', '<span class="pastille pastille--ok">Prête</span>']
+  ].map(([i, t, d, s]) => `<div class="ligne"><div class="ligne__ico">${icone(i)}</div><div class="ligne__txt"><div class="ligne__titre">${t}</div><div class="ligne__detail">${d}</div></div>${s}${icone('chevron','cb-ico cb-ico--24')}</div>`).join('');
+  return `<div class="ipad ipad--page"><div class="ipad__ecran cb" style="flex-direction:column">
+    <div class="etat" style="padding:0 32px"><span>8:47</span><i></i></div>${barreMode('magasin', 'Ventes et prix', true)}
+    <div class="ipad__grille"><div style="display:grid;gap:20px;align-content:start">${carteMagasin(p, META, R)}<button class="btn btn--principal">${icone('imprimer')}Imprimer l'étiquette</button></div><div>${blocVentes(c, 'magasin')}</div></div>
+    <div style="padding:0 28px 28px;display:grid;gap:12px"><h3 class="titre-3">À traiter</h3>${lignes}</div>
+  </div></div>`;
+};
+const couv = `<section class="page"><div class="marque"><i></i>La Corbeille Paul Bert</div>
+  <div class="couv__blocs"><div class="b1"></div><div class="b2"></div><div class="b3"></div></div><div class="couv__disque"></div>
+  <h1 class="couv__nom">Corbeille</h1><p class="couv__tag">L'appli du magasin. Tu scannes, elle te dit quoi faire.</p>
+  <div class="couv__pied">iPhone · iPad · Mac</div></section>`;
+document.getElementById('pages').innerHTML = [
+  couv,
+  page(2, 'Trois gestes, rien de caché.', 'Magasin, Achat, Inventaire. Tout part de l’accueil, en grand, sans menu à chercher.',
+    tel(ecranAccueil({ bonjour: 'Bonjour', date: 'Mardi 17 novembre', aTraiter: 3 }))),
+  page(3, 'Le scan se voit.', 'Un éclair vert et le nom du produit. Même téléphone en silencieux, on sait que c’est bon.',
+    tel(ecranEclair({ type: 'ok', nom: 'Ayran Suntat 1 L', info: euros(AYRAN_1L.prix), detail: 'Top vente' }), 'background:var(--succes-vif)')),
+  page(4, 'Le prix, la marge, les ventes.', 'Un produit, tout ce qu’il faut savoir pour décider en rayon. Lisible à bout de bras.',
+    tel(ecranFicheMagasin(YAOURT_1KG, META, R, { lectureSeule: false }))),
+  page(5, 'Combien j’en prends ? Et pourquoi.', 'Chez Metro ou chez un grossiste, l’appli propose un chiffre et dit d’où il vient.',
+    tel(ecranFicheAchat(AYRAN_25, META, R, { qui: 'Hors ligne' }))),
+  page(6, 'La même, en plus grand.', 'Sur iPad et sur Mac, les mêmes mots et les mêmes gestes, avec la place en plus.', ipad())
+].join('');
+document.body.dataset.pret = '1';
+</script></body></html>
