@@ -18,7 +18,7 @@ export function barreMode(mode, droite = '', fermer = false) {
   return `<div class="mode mode--${mode}">${icone(mode, 'cb-ico cb-ico--24')}${noms[mode]}<span class="mode__qui">${esc(droite)}</span>${fermer ? `<button class="mode__fermer" data-action="accueil" aria-label="Fermer">${icone('x', 'cb-ico cb-ico--24')}</button>` : ''}</div>`;
 }
 
-export function ecranAccueil({ bonjour = 'Bonjour', date = '', aTraiter = 0, donnees = '' } = {}) {
+export function ecranAccueil({ bonjour = 'Bonjour', date = '', aTraiter = 0, donnees = '', petites = [['factures', 'facture', 'Lire une facture'], ['donnees', 'import', 'Mettre à jour les ventes']], liens = [['reglages', 'Réglages']] } = {}) {
   return `<div class="scr cb">
   <div class="scr__corps">
     <div class="accueil__haut"><h1 class="titre-1">${esc(bonjour)}</h1>${aTraiter ? `<button class="compteur" data-action="a-traiter">${aTraiter} à traiter</button>` : ''}</div>
@@ -27,11 +27,10 @@ export function ecranAccueil({ bonjour = 'Bonjour', date = '', aTraiter = 0, don
     <button class="tuile tuile--achat" data-action="mode" data-mode="achat">${icone('achat')}<div><b>Achat</b><span>Combien en prendre, et pourquoi</span></div></button>
     <button class="tuile tuile--inventaire" data-action="mode" data-mode="inventaire">${icone('inventaire')}<div><b>Inventaire</b><span>Compter une zone</span></div></button>
     <div class="duo">
-      <button class="tuile tuile--petite" data-action="factures">${icone('facture')}<b>Lire une facture</b></button>
-      <button class="tuile tuile--petite" data-action="donnees">${icone('import')}<b>Mettre à jour les ventes</b></button>
+      ${petites.map(([a, i, t]) => `<button class="tuile tuile--petite" data-action="${a}">${icone(i)}<b>${t}</b></button>`).join('')}
     </div>
     ${donnees ? `<div class="note">${donnees}</div>` : ''}
-    <button class="lien" data-action="reglages">Réglages</button>
+    <div style="display:flex;gap:24px">${liens.map(([a, t]) => `<button class="lien" data-action="${a}">${t}</button>`).join('')}</div>
   </div>
   <button class="btn btn--scan fab" data-action="scanner" aria-label="Scanner">${icone('scan')}</button>
 </div>`;

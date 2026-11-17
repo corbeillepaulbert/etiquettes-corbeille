@@ -5,6 +5,7 @@ import { calculAchat, euros } from './calcul.js';
 import { icone } from './icones.js';
 import { ouvrirScanner, ecouterDouchette, bip } from './moteur/scan.js';
 import { lire, ecrire } from './donnees.js';
+import { chargerEtiquettes, actionEtiquettes } from './etiquettes.js';
 import { chargerConfig, estRelie, relier, delier, aTraiterEnCache, majATraiter, rafraichirMaintenant, marquerTraite, prendreExports, synchroniserListe } from './drive.js';
 
 const app = document.getElementById('app');
@@ -34,9 +35,27 @@ function resumeDonnees() {
 // ---------- écrans ----------
 function accueil() {
   courant = null;
-  afficher(ecranAccueil({ bonjour: 'Bonjour', date: dateDuJour(), aTraiter: nouveaux(), donnees: resumeDonnees() })
-    .replace('data-action="factures">' + icone('facture') + '<b>Lire une facture</b>',
-      'data-action="liste">' + icone('achat') + `<b>Ma liste d'achat${etat.liste.length ? ` (${etat.liste.length})` : ''}</b>`), 'accueil');
+  afficher(ecranAccueil({
+    bonjour: 'Bonjour', date: dateDuJour(), aTraiter: nouveaux(), donnees: resumeDonnees(),
+    petites: [['etiquettes', 'imprimer', 'Étiquettes'], ['liste', 'achat', `Ma liste d'achat${etat.liste.length ? ` (${etat.liste.length})` : ''}`]],
+    liens: [['donnees', 'Mettre à jour les ventes'], ['reglages', 'Réglages']]
+  }), 'accueil');
+}
+
+/** Ouvrir Magasin ou Achat : la dernière fiche consultée, jamais la caméra d'office. */
+async function ouvrirMode(m) {
+  mode = m;
+  const dernier = await lire(m === 'achat' ? 'dernierAchat' : 'dernierMagasin', '');
+  const p = dernier && trouver(dernier);
+  if (p) return fiche(p);
+  afficher(`<div class="scr cb">${barreMode(m, '', true)}
+  <div class="scr__corps">
+    <h1 class="titre-1">${m === 'achat' ? 'Achat' : 'Magasin'}</h1>
+    <div class="carte"><div class="titre-2">${m === 'achat' ? 'Combien en prendre ?' : 'Prix, ventes, marge.'}</div>
+    <div class="note" style="margin-top:8px">${m === 'achat' ? 'Scanne un produit pour voir combien il en part et combien en prendre.' : 'Scanne un produit pour voir son prix en caisse, ses ventes et sa marge.'}</div></div>
+    ${m === 'achat' ? `<button class="ligne" data-action="liste" style="border:0;font:inherit;text-align:left;width:100%"><div class="ligne__ico">${icone('achat')}</div><div class="ligne__txt"><div class="ligne__titre">Ma liste d'achat</div><div class="ligne__detail">${etat.liste.length} produit${etat.liste.length > 1 ? 's' : ''}</div></div>${icone('chevron', 'cb-ico cb-ico--24')}</button>` : ''}
+  </div>
+  <div class="scr__bas"><button class="btn btn--principal${m === 'achat' ? ' btn--achat' : ''}" data-action="scanner">${icone('scan')}Scanner un produit</button></div></div>`, m);
 }
 
 function eclair(type, nom, info, detail, ensuite) {
@@ -61,6 +80,7 @@ function resultat(code) {
 }
 
 function fiche(p) {
+  ecrire(mode === 'achat' ? 'dernierAchat' : 'dernierMagasin', p.e);
   const c = calculAchat(p, meta(), etat.reglages);
   courant = { produit: p, qte: c.qte };
   const pict = /boisson|lait|ayran|eau|jus|soda|cola/i.test(`${p.lib} ${p.dep} ${p.fam}`) ? 'bouteille' : 'pot';
@@ -198,11 +218,13 @@ function toast(texte, annuler) {
 }
 
 // ---------- actions ----------
+const nav = { afficher: (h, n) => afficher(h, n), toast: (t, f) => toast(t, f), donnees: m => donnees(m) };
 app.addEventListener('click', async e => {
   const b = e.target.closest('[data-action]'); if (!b) return;
   const a = b.dataset.action;
+  if (await actionEtiquettes(a, b, nav)) return;
   if (a === 'accueil') return accueil();
-  if (a === 'mode') { if (b.dataset.mode === 'inventaire') return pasEncore('inventaire'); return scanner(b.dataset.mode); }
+  if (a === 'mode') { if (b.dataset.mode === 'inventaire') return pasEncore('inventaire'); return ouvrirMode(b.dataset.mode); }
   if (a === 'scanner') return scanner(mode);
   if (a === 'scanner-achat') return scanner('achat');
   if (a === 'donnees') return donnees();
@@ -299,6 +321,7 @@ document.addEventListener('visibilitychange', () => { if (document.visibilitySta
 (async () => {
   await charger();
   await chargerConfig();
+  await chargerEtiquettes();
   cacheAT = await aTraiterEnCache();
   nomAppareil = await lire('nomAppareil', '');
   accueil();
