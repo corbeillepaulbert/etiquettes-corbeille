@@ -7,6 +7,7 @@
 import { ecranAccueil, ecranEclair, ecranFicheMagasin, ecranFicheAchat } from '../js/ecrans.js';
 import { euros } from '../js/calcul.js';
 import { META, AYRAN_1L, YAOURT_1KG, AYRAN_25 } from './donnees-exemple.js';
+import { ecranAchatStock } from './maquettes.js';
 const R = { semaines: 1, seuilTop: 365 };
 const etat = `<div class="etat"><span>8:47</span><i></i></div>`;
 const cell = (etiq, html, fond = '') => `<div class="story__cellule"><div class="story__etiq">${etiq}</div><div class="tel"><div class="tel__ecran" style="${fond}">${etat}${html}</div></div></div>`;
@@ -15,7 +16,7 @@ document.getElementById('s').innerHTML = `<h1 class="story__nom">Corbeille</h1><
 ${cell('1 · Accueil', ecranAccueil({ bonjour: 'Bonjour', date: 'Mardi 17 novembre', aTraiter: 3 }))}
 ${cell('2 · Scan', ecranEclair({ type: 'ok', nom: 'Ayran Suntat 1 L', info: euros(AYRAN_1L.prix), detail: 'Top vente' }), 'background:var(--succes-vif)')}
 ${cell('3 · En rayon', ecranFicheMagasin(YAOURT_1KG, META, R, { lectureSeule: false }))}
-${cell('4 · À l’achat', ecranFicheAchat(AYRAN_25, META, R, { qui: 'Hors ligne' }))}
+${cell('4 · À l’achat', ecranAchatStock(AYRAN_25, { jours: 365, dluo: new Date('2026-12-12T09:00:00'), marge: 3, horizonMax: 90, aujourdHui: new Date('2026-11-17T09:00:00') }))}
 </div>`;
 document.body.dataset.pret = '1';
 </script></body></html>

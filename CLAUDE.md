@@ -33,7 +33,8 @@ Appli de La Corbeille Paul Bert. Deux versions cohabitent sur le même site GitH
 
 ### Dossier FACTURES ACHAT : lecture seule absolue
 - Le script **lit** FACTURES ACHAT et ses sous-dossiers : il **ne déplace rien, ne renomme rien, ne supprime rien, n'écrit rien** dans ce dossier.
-- Appels autorisés sur ce dossier et son contenu : `getFolderById`, `getFolders`, `getFiles`, `getName`, `getId`, `getDateCreated`, `getLastUpdated`, `getMimeType`, `getBlob`.
+- Appels autorisés sur ce dossier et son contenu : `getFolderById`, `getFoldersByName`, `getFolders`, `getFiles`, `searchFiles`, `getName`, `getId`, `getDateCreated`, `getLastUpdated`, `getMimeType`, `getSize`, `getBlob`.
+- Même règle pour EXPORTS STOREPOS : le script n'y fait que lister et lire les fichiers posés directement dans le dossier (pas ANCIENS).
 - Appels interdits : `moveTo`, `setName`, `setTrashed`, `createFile`, `createFolder`, `addFile`, `removeFile`, `setDescription`, `setSharing`, `setStarred`, et toute écriture équivalente via l'API Drive avancée.
 - Les données de la V2 vivent dans un dossier à part, `APPLI V2`. Dext et l'expert-comptable continuent sans intervention.
 - Toute revue de code du script commence par une recherche de ces appels interdits.
@@ -42,6 +43,11 @@ Appli de La Corbeille Paul Bert. Deux versions cohabitent sur le même site GitH
 - Un déclencheur toutes les 15 minutes cherche les nouvelles factures et les place dans « À traiter ».
 - La boîte À traiter a un bouton **« Rafraîchir maintenant »** qui appelle la même fonction tout de suite (verrou `LockService` pour éviter deux passages simultanés) et affiche l'heure du dernier passage.
 - Quotas d'un compte gratuit : 90 min par jour de déclencheurs, 6 min par exécution, 20 000 appels sortants par jour.
+
+## Script Apps Script
+
+- Source : `apps-script/Code.gs` (sans aucun secret ni identifiant de dossier). Installation décrite en tête du fichier.
+- Écritures du script : uniquement `createFolder` (APPLI V2, une fois), `createFile` et `setContent` sur les fichiers JSON de APPLI V2.
 
 ## Code de la V2
 

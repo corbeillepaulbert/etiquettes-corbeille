@@ -4,41 +4,85 @@
 <link rel="stylesheet" href="../css/tokens.css"><link rel="stylesheet" href="../css/composants.css"><link rel="stylesheet" href="teaser.css">
 </head><body><div id="pages"></div>
 <script type="module">
-import { ecranAccueil, ecranEclair, ecranFicheMagasin, ecranFicheAchat, barreMode, carteMagasin, blocVentes } from '../js/ecrans.js';
+import { ecranAccueil, ecranEclair, ecranFicheMagasin, barreMode, carteMagasin, blocVentes, joli } from '../js/ecrans.js';
 import { icone } from '../js/icones.js';
-import { calculAchat, euros, marge } from '../js/calcul.js';
+import { calculAchat, euros } from '../js/calcul.js';
 import { META, AYRAN_1L, YAOURT_1KG, AYRAN_25 } from './donnees-exemple.js';
+import { HARISSA, POIS_CHICHES, HUILE_5L, PRINCE, COCA_15, OIGNON_5KG } from './donnees-exemple.js';
+import { blocStock, ecranAchatStock, calculStock, ecranListe, ecranEtiquettes, planche, affiche, ecranFacture, ecranEnvoiCaisse, ecranInconnu, ecranPin, ecranInventaire, ecranMac } from './maquettes.js';
 const R = { semaines: 1, seuilTop: 365 };
-const etat = (blanc) => `<div class="etat${blanc ? ' etat--blanc' : ''}"><span>8:47</span><i></i></div>`;
+const AUJ = new Date('2026-11-17T09:00:00');
+const COURT = { jours: 365, dluo: new Date('2026-12-12T09:00:00'), marge: 3, horizonMax: 90, aujourdHui: AUJ };
+const LONG = { jours: 365, dluo: new Date('2028-05-01T09:00:00'), marge: 3, horizonMax: 90, aujourdHui: AUJ };
+const etat = () => `<div class="etat"><span>8:47</span><i></i></div>`;
 const tel = (html, fond = '') => `<div class="tel tel--page"><div class="tel__ecran" style="${fond}">${etat()}${html}</div></div>`;
-const page = (n, titre, phrase, corps) => `<section class="page"><div class="marque"><i></i>Corbeille</div><div class="num">${n} / 6</div><div class="entete"><h1 class="titre">${titre}</h1><p class="phrase">${phrase}</p></div>${corps}</section>`;
-const ipad = () => {
-  const p = YAOURT_1KG, c = calculAchat(p, META, R);
-  const lignes = [
-    ['facture', 'Facture Globalfood du 14/11', '31 lignes', '<span class="pastille pastille--alerte">2 à vérifier</span>'],
-    ['achat', 'Liste d’achat', '12 produits notés', '<span class="pastille pastille--ok">Prête</span>']
-  ].map(([i, t, d, s]) => `<div class="ligne"><div class="ligne__ico">${icone(i)}</div><div class="ligne__txt"><div class="ligne__titre">${t}</div><div class="ligne__detail">${d}</div></div>${s}${icone('chevron','cb-ico cb-ico--24')}</div>`).join('');
-  return `<div class="ipad ipad--page"><div class="ipad__ecran cb" style="flex-direction:column">
-    <div class="etat" style="padding:0 32px"><span>8:47</span><i></i></div>${barreMode('magasin', 'Ventes et prix', true)}
-    <div class="ipad__grille"><div style="display:grid;gap:20px;align-content:start">${carteMagasin(p, META, R)}<button class="btn btn--principal">${icone('imprimer')}Imprimer l'étiquette</button></div><div>${blocVentes(c, 'magasin')}</div></div>
-    <div style="padding:0 28px 28px;display:grid;gap:12px"><h3 class="titre-3">À traiter</h3>${lignes}</div>
-  </div></div>`;
-};
-const couv = `<section class="page"><div class="marque"><i></i>La Corbeille Paul Bert</div>
+const pages = [];
+const page = (titre, phrase, corps) => pages.push((n, t) => `<section class="page"><div class="marque"><i></i>Corbeille</div><div class="num">${n} / ${t}</div><div class="entete"><h1 class="titre">${titre}</h1><p class="phrase">${phrase}</p></div>${corps}</section>`);
+const brut = html => pages.push(() => html);
+
+brut(`<section class="page"><div class="marque"><i></i>La Corbeille Paul Bert</div>
   <div class="couv__blocs"><div class="b1"></div><div class="b2"></div><div class="b3"></div></div><div class="couv__disque"></div>
   <h1 class="couv__nom">Corbeille</h1><p class="couv__tag">L'appli du magasin. Tu scannes, elle te dit quoi faire.</p>
-  <div class="couv__pied">iPhone · iPad · Mac</div></section>`;
-document.getElementById('pages').innerHTML = [
-  couv,
-  page(2, 'Trois gestes, rien de caché.', 'Magasin, Achat, Inventaire. Tout part de l’accueil, en grand, sans menu à chercher.',
-    tel(ecranAccueil({ bonjour: 'Bonjour', date: 'Mardi 17 novembre', aTraiter: 3 }))),
-  page(3, 'Le scan se voit.', 'Un éclair vert et le nom du produit. Même téléphone en silencieux, on sait que c’est bon.',
-    tel(ecranEclair({ type: 'ok', nom: 'Ayran Suntat 1 L', info: euros(AYRAN_1L.prix), detail: 'Top vente' }), 'background:var(--succes-vif)')),
-  page(4, 'Le prix, la marge, les ventes.', 'Un produit, tout ce qu’il faut savoir pour décider en rayon. Lisible à bout de bras.',
-    tel(ecranFicheMagasin(YAOURT_1KG, META, R, { lectureSeule: false }))),
-  page(5, 'Combien j’en prends ? Et pourquoi.', 'Chez Metro ou chez un grossiste, l’appli propose un chiffre et dit d’où il vient.',
-    tel(ecranFicheAchat(AYRAN_25, META, R, { qui: 'Hors ligne' }))),
-  page(6, 'La même, en plus grand.', 'Sur iPad et sur Mac, les mêmes mots et les mêmes gestes, avec la place en plus.', ipad())
-].join('');
+  <div class="couv__pied">iPhone · iPad · Mac</div></section>`);
+
+page('Tout le magasin, dans la poche.', 'Une seule appli pour ce qui prenait des heures au bureau.', `<div class="sommaire">
+  ${[['var(--corbeille)', 'En rayon', 'prix, ventes, étiquettes'], ['var(--achat)', 'À l’achat', 'combien d’un coup'], ['var(--corbeille)', 'Étiquettes', 'planches et affiches'], ['var(--encre)', 'Factures', 'lues, vérifiées'], ['var(--encre)', 'Caisse', 'fichier StorePOS prêt'], ['var(--abricot)', 'Produits nouveaux', 'créés en un geste'], ['var(--inventaire)', 'Inventaire', 'compté au scan'], ['var(--achat)', 'iPhone, iPad, Mac', 'les mêmes mots']].map(([c, t, s]) => `<div><i style="background:${c}"></i>${t}<span>${s}</span></div>`).join('')}</div>`);
+
+page('Trois gestes, rien de caché.', 'Magasin, Achat, Inventaire. Tout part de l’accueil, en grand, sans menu à chercher.',
+  tel(ecranAccueil({ bonjour: 'Bonjour', date: 'Mardi 17 novembre', aTraiter: 2 })));
+page('Le scan se voit.', 'Un éclair vert et le nom du produit. Même téléphone en silencieux, on sait que c’est bon.',
+  tel(ecranEclair({ type: 'ok', nom: 'Ayran Suntat 1 L', info: euros(AYRAN_1L.prix), detail: 'Top vente' }), 'background:var(--succes-vif)'));
+page('Le prix, la marge, les ventes.', 'Un produit, tout ce qu’il faut savoir pour décider en rayon. Lisible à bout de bras.',
+  tel(ecranFicheMagasin(YAOURT_1KG, META, R, { lectureSeule: false }).replace(/<div class="achat">[\s\S]*?<div class="fiabilite">[\s\S]*?<\/div>\s*<\/div>/, blocStock(YAOURT_1KG, { ...COURT, dluo: new Date('2026-12-05T09:00:00') }))));
+page('Acheter plus, moins souvent.', 'Combien d’un coup, et jusqu’à quand tu tiens. La date limite fixe la fenêtre : 3 semaines ici.',
+  tel(ecranAchatStock(AYRAN_25, COURT)));
+page('Si la date le permet, trois mois.', 'Sur un produit qui se garde, l’appli remplit ton maximum de stock, pas plus.',
+  tel(ecranAchatStock(HARISSA, LONG)));
+const sc = calculStock(AYRAN_25, COURT), sh = calculStock(HARISSA, LONG), sp = calculStock(POIS_CHICHES, LONG), sy = calculStock(YAOURT_1KG, { ...COURT, dluo: new Date('2026-12-05T09:00:00') });
+page('Une liste, et c’est parti.', 'Chaque produit noté avec sa quantité et sa date de fin. On scanne en rayon chez Metro.',
+  tel(ecranListe([{ lib: AYRAN_25.lib, qte: sc.qte, jusqu: sc.jusqu }, { lib: YAOURT_1KG.lib, qte: sy.qte, jusqu: sy.jusqu }, { lib: HARISSA.lib, qte: sh.qte, jusqu: sh.jusqu }, { lib: POIS_CHICHES.lib, qte: sp.qte, jusqu: sp.jusqu }], sy.jusqu)));
+const ETQ = [{ ...POIS_CHICHES }, { ...HUILE_5L }, { ...PRINCE, top: true }, { ...COCA_15, top: true }, { ...AYRAN_1L, top: true }, { ...YAOURT_1KG, top: true }];
+page('L’étiquette, en vrai.', 'Nom en très gros, prix, prix au kilo, code-barres. On la voit à sa taille avant d’imprimer.',
+  tel(ecranEtiquettes([ETQ[0], ETQ[1], ETQ[2], ETQ[4]])));
+page('24 étiquettes, une feuille A4.', 'Papier simple, sans fond coloré. Les meilleures ventes ont leur bandeau noir.',
+  `<div style="position:absolute;left:90px;top:470px">${planche(ETQ)}</div>`);
+page('Les fruits et légumes ont leur affiche.', 'Origine, catégorie, prix au kilo calculé tout seul. Rien ne s’imprime sans prix ni origine.',
+  `<div style="position:absolute;left:120px;top:520px">${affiche({ nom: 'Oignon jaune', sous: 'Sac de 5 kg', origine: 'France', drapeau: ['#1F3A93', '#FFFFFF', '#D0312D'], prix: OIGNON_5KG.prix, unite: 'le sac', auKilo: OIGNON_5KG.prix / 5 })}</div>
+   <div style="position:absolute;left:120px;right:120px;top:1170px;display:grid;gap:18px">${[['A4 paysage', 'affiche de rayon'], ['A6 à piquer', 'dans les bacs'], ['Liste murale', 'les prix de la semaine'], ['Fiche caisse', 'le code à flasher']].map(([a, b]) => `<div style="display:flex;justify-content:space-between;font:600 34px/44px var(--font-titre);border-bottom:2px solid var(--trait);padding-bottom:14px"><span>${a}</span><span style="font:400 30px/44px var(--font-texte);color:var(--encre-2)">${b}</span></div>`).join('')}</div>`);
+const FAC = [{ lib: AYRAN_1L.lib, quantite: 24, pa: AYRAN_1L.pa0, ok: true, comment: 'par le code-barres' }, { lib: YAOURT_1KG.lib, quantite: 12, pa: YAOURT_1KG.pa0, ok: true, comment: 'appris la dernière fois' }, { lib: 'AYRAN SUNTAT 2L', ok: false, message: 'Pas encore en caisse : scanne-le pour créer sa fiche.' }];
+page('La facture se lit toute seule.', 'Chaque ligne retrouve son produit. Les prix d’achat sont comparés à la caisse.',
+  tel(ecranFacture(FAC, 'Globalfood')));
+page('La caisse à jour, en un fichier.', 'Les changements de la journée partent dans un seul fichier StorePOS. Toujours testé sur une ligne d’abord.',
+  tel(ecranEnvoiCaisse([{ lib: AYRAN_1L.lib, quoi: 'prix d’achat vérifié' }, { lib: YAOURT_1KG.lib, quoi: 'prix d’achat vérifié' }, { lib: 'AYRAN SUNTAT 2L', quoi: 'nouvelle fiche' }])));
+page('Les factures arrivent seules.', 'Posée sur le Drive, une facture apparaît dans « À traiter ». Dext et le comptable ne voient aucune différence.',
+  tel(`<div class="scr cb">${barreMode('magasin', 'À traiter', true)}<div class="scr__corps">
+    <div class="accueil__haut"><h1 class="titre-1">À traiter</h1><span class="compteur">2</span></div><div class="note" style="margin-top:-8px">Drive vérifié à 8:45</div>
+    ${[['Facture Globalfood 17-11.pdf', '2026 › GLOBALFOOD · 17 nov.'], ['Facture DCA 16-11.pdf', '2026 › DCA · 16 nov.']].map(([t, d]) => `<div class="ligne"><div class="ligne__ico">${icone('facture')}</div><div class="ligne__txt"><div class="ligne__titre">${t}</div><div class="ligne__detail">${d}</div></div><button class="btn btn--secondaire">Traitée</button></div>`).join('')}
+    <h2 class="titre-3" style="margin-top:8px">Déjà traitées</h2><div class="ligne"><div class="ligne__ico">${icone('facture')}</div><div class="ligne__txt"><div class="ligne__titre">Facture Metro 14-11.pdf</div><div class="ligne__detail">traitée par iPhone du magasin</div></div><span class="pastille pastille--ok">Traitée</span></div>
+    </div><div class="scr__bas"><button class="btn btn--principal">${icone('import')}Rafraîchir maintenant</button></div></div>`));
+page('Un produit nouveau ? Trois secondes.', 'Le caissier scanne, l’appli trouve le nom, la marque et la photo. Il n’a plus qu’à confirmer.',
+  tel(ecranInconnu('6194049100013')));
+page('Chacun son code à la caisse.', 'Un code à 4 chiffres : on sait qui a fait quoi, sans compte ni mot de passe.',
+  tel(ecranPin()));
+page('L’inventaire au scan.', 'Zone par zone, la quantité au pouce. Tout est enregistré au fil de l’eau, rien ne se perd.',
+  tel(ecranInventaire()));
+page('La même, en plus grand.', 'Sur iPad, les mêmes mots et les mêmes gestes, avec la place en plus.', (() => {
+  const p = YAOURT_1KG, c = calculAchat(p, META, R);
+  const lignes = [['facture', 'Facture Globalfood 17-11.pdf', '3 lignes', '<span class="pastille pastille--alerte">1 à vérifier</span>'], ['achat', 'Liste d’achat', '4 produits notés', '<span class="pastille pastille--ok">Prête</span>']]
+    .map(([i, t, d, s]) => `<div class="ligne"><div class="ligne__ico">${icone(i)}</div><div class="ligne__txt"><div class="ligne__titre">${t}</div><div class="ligne__detail">${d}</div></div>${s}${icone('chevron', 'cb-ico cb-ico--24')}</div>`).join('');
+  return `<div class="ipad ipad--page"><div class="ipad__ecran cb" style="flex-direction:column"><div class="etat" style="padding:0 32px"><span>8:47</span><i></i></div>${barreMode('magasin', 'Ventes et prix', true)}
+    <div class="ipad__grille"><div style="display:grid;gap:20px;align-content:start">${carteMagasin(p, META, R)}<button class="btn btn--principal">${icone('imprimer')}Imprimer l'étiquette</button></div><div>${blocStock(YAOURT_1KG, { ...COURT, dluo: new Date('2026-12-05T09:00:00') })}</div></div>
+    <div style="padding:0 28px 28px;display:grid;gap:12px"><h3 class="titre-3">À traiter</h3>${lignes}</div></div></div>`;
+})());
+page('Au bureau, sur le Mac.', 'La liste à gauche, la facture à droite, le clavier pour tout. Une vraie fenêtre dans le Dock.',
+  `<div class="mac" style="top:560px"><div class="mac__cadre">${ecranMac(FAC)}</div><div class="mac__pied"></div></div>`);
+page('Sérieuse, par principe.', 'Ce que l’appli ne fera jamais, même pressée.', `<div class="piliers">
+  ${[['var(--corbeille)', 'check', 'Aucun prix inventé', 'Seuls les prix de la caisse s’impriment.'], ['var(--achat)', 'frais', 'Rien d’irréversible', 'Chaque geste a son « Annuler ».'], ['var(--inventaire)', 'import', 'Marche sans réseau', 'Allée de Metro ou réserve : tout continue.'], ['var(--encre)', 'facture', 'Les factures ne bougent pas', 'Le Drive et le comptable restent comme avant.']].map(([c, i, t, s]) => `<div class="pilier"><div class="pilier__ico" style="background:${c}">${icone(i)}</div><div><b>${t}</b><span>${s}</span></div></div>`).join('')}</div>`);
+brut(`<section class="page"><div class="marque"><i></i>La Corbeille Paul Bert</div>
+  <div class="couv__blocs" style="top:200px"><div class="b1"></div><div class="b2"></div><div class="b3"></div></div><div class="couv__disque" style="top:680px"></div>
+  <h1 class="couv__nom">Corbeille</h1><p class="couv__tag">Pensée pour le plus petit des iPhone, et pour les mains du magasin.</p>
+  <div class="couv__pied">iPhone · iPad · Mac</div></section>`);
+const T = pages.length;
+document.getElementById('pages').innerHTML = pages.map((f, i) => f(i + 1, T)).join('');
 document.body.dataset.pret = '1';
 </script></body></html>

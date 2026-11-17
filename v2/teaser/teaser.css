@@ -48,3 +48,59 @@ body{margin:0;background:#E9E4DA}
 .story__cellule .tel{transform:scale(.82)}
 .story__etiq{position:absolute;left:50%;top:-26px;transform:translateX(-50%);z-index:3;background:var(--encre);color:#fff;font:700 26px/1 var(--font-titre);padding:14px 26px;border-radius:999px;white-space:nowrap}
 .story__pied{position:absolute;left:0;right:0;bottom:56px;text-align:center;font:600 30px/1 var(--font-texte);color:var(--encre-2)}
+/* ---- maquettes des prochains lots ---- */
+.trio{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
+.trio__case{background:var(--carte);border-radius:var(--rayon-m);box-shadow:var(--ombre-carte);padding:12px 8px;text-align:center}
+.trio__case b{display:block;font:700 36px/40px var(--font-titre)}
+.trio__case span{font:400 16px/20px var(--font-texte);color:var(--encre-2)}
+.ean{width:150px;height:auto;display:block}
+.etiq{width:300px;height:160px;background:#fff;border:1px dashed #B9B2A6;padding:12px 14px;display:flex;flex-direction:column;justify-content:space-between;box-sizing:border-box;position:relative;font-family:var(--font-texte);color:#16140F}
+.etiq--top{padding-left:44px}.etiq--top::before{content:"TOP VENTE";position:absolute;left:0;top:0;bottom:0;width:30px;background:#16140F;color:#fff;writing-mode:vertical-rl;transform:rotate(180deg);font:800 13px/30px var(--font-texte);text-align:center;letter-spacing:2px}
+.etiq__nom{font:800 26px/28px var(--font-titre);text-transform:uppercase;letter-spacing:-.3px}
+.etiq__bas{display:flex;align-items:flex-end;justify-content:space-between;gap:8px}
+.etiq__prix{font:800 40px/40px var(--font-titre);letter-spacing:-1px}
+.etiq__unite{font:500 14px/18px var(--font-texte)}
+.etiq .ean{width:118px}
+.planche{width:900px;background:#fff;padding:24px;display:grid;grid-template-columns:repeat(3,1fr);gap:0;box-shadow:0 30px 60px #16140F26;transform-origin:top left}
+.planche .etiq{width:100%;height:154px}
+.affiche{width:840px;height:594px;background:#fff;box-shadow:0 30px 60px #16140F26;border-radius:8px;position:relative;padding:40px 48px;box-sizing:border-box;font-family:var(--font-texte);color:#16140F}
+.affiche__illus{position:absolute;right:48px;top:40px;width:200px;height:200px}
+.affiche__illus svg{width:100%;height:100%}
+.affiche__nom{font:800 84px/86px var(--font-titre);letter-spacing:-2px}
+.affiche__sous{font:500 30px/38px var(--font-texte);color:var(--encre-2)}
+.affiche__origine{display:flex;align-items:center;gap:14px;margin-top:22px;font:600 26px/32px var(--font-texte)}
+.drapeau{display:inline-flex;width:54px;height:36px;border-radius:4px;overflow:hidden;box-shadow:0 0 0 1px #0002}.drapeau i{flex:1}
+.affiche__prix{position:absolute;left:48px;bottom:74px;font:800 150px/150px var(--font-titre);letter-spacing:-5px}
+.affiche__unite{position:absolute;left:52px;bottom:36px;font:600 28px/34px var(--font-texte)}
+.progres{height:12px;border-radius:6px;background:var(--trait);overflow:hidden}.progres i{display:block;height:100%;background:var(--corbeille)}
+.pin{display:flex;justify-content:center;gap:18px}.pin i{width:22px;height:22px;border-radius:50%;box-shadow:inset 0 0 0 3px var(--encre)}.pin i.plein{background:var(--encre)}
+.clavier{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}
+.compteur-inv{display:flex;align-items:center;gap:6px;flex-wrap:wrap;background:var(--inventaire-clair);border-radius:var(--rayon-l);padding:16px;color:var(--inventaire);font:400 18px/24px var(--font-texte)}
+.compteur-inv b{font:700 30px/1 var(--font-titre)}
+.quatre{display:grid;grid-template-columns:repeat(4,1fr);gap:8px}
+/* Mac */
+.mac{position:absolute;left:50%;transform:translateX(-50%) scale(.72);transform-origin:top center}
+.mac__cadre{background:#16140F;border-radius:26px 26px 0 0;padding:18px 18px 22px}
+.mac__ecran{width:1280px;height:800px;background:var(--papier);display:flex;overflow:hidden;border-radius:8px}
+.mac__pied{height:26px;background:#C9C3B8;border-radius:0 0 30px 30px;margin:0 -80px;box-shadow:0 30px 50px #16140F33}
+.mac__liste{width:340px;border-right:1px solid var(--trait);background:var(--carte)}
+.mac__item{padding:14px 20px;border-bottom:1px solid var(--trait);display:grid;gap:2px}.mac__item b{font:600 18px/22px var(--font-texte)}.mac__item span{font:400 15px/20px var(--font-texte);color:var(--encre-2)}
+.mac__item--actif{background:var(--corbeille-clair);box-shadow:inset 4px 0 0 var(--corbeille)}
+.mac__detail{flex:1;padding:28px 32px;display:flex;flex-direction:column;gap:20px}
+.mac__tableau{background:var(--carte);border-radius:var(--rayon-l);box-shadow:var(--ombre-carte);overflow:hidden}
+.mac__entete,.mac__ligne{display:grid;grid-template-columns:1fr 70px 140px 140px 48px;align-items:center;padding:0 20px;min-height:56px;font:400 17px/22px var(--font-texte)}
+.mac__entete{font-weight:600;color:var(--encre-2);border-bottom:1px solid var(--trait);min-height:44px}
+.mac__ligne{border-bottom:1px solid var(--trait)}.mac__ligne--alerte{background:var(--alerte-fond);color:var(--alerte)}
+.mac__ligne .cb-ico{color:var(--succes)}.mac__ligne--alerte .cb-ico{color:var(--alerte)}
+/* pages de texte */
+.piliers{position:absolute;left:96px;right:96px;top:420px;display:grid;gap:28px}
+.pilier{display:flex;gap:28px;align-items:flex-start;background:var(--carte);border-radius:36px;padding:36px 40px;box-shadow:var(--ombre-carte)}
+.pilier__ico{width:84px;height:84px;border-radius:24px;display:grid;place-items:center;flex:none}
+.pilier__ico .cb-ico{width:44px;height:44px;color:#fff}
+.pilier b{display:block;font:700 40px/46px var(--font-titre);letter-spacing:-.5px}
+.pilier span{display:block;font:400 30px/40px var(--font-texte);color:var(--encre-2);margin-top:6px}
+.sommaire{position:absolute;left:96px;right:96px;top:540px;display:grid;gap:22px}
+.sommaire div{display:flex;align-items:center;gap:28px;font:600 40px/48px var(--font-titre)}
+.sommaire i{width:28px;height:28px;border-radius:50%;flex:none}
+.sommaire span{font:400 28px/36px var(--font-texte);color:var(--encre-2);margin-left:auto;text-align:right}
+.bientot{display:inline-block;margin-left:16px;vertical-align:middle;font:700 24px/1 var(--font-texte);background:var(--abricot);color:var(--encre);padding:10px 18px;border-radius:999px;letter-spacing:0}

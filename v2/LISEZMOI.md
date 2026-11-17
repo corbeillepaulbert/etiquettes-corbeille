@@ -10,5 +10,5 @@ Adresse : `https://corbeillepaulbert.github.io/etiquettes-corbeille/v2/`
 - Rien n'est envoyé à StorePOS ni écrit dans la V1.
 
 ## Teaser
-`teaser/corbeille-teaser.pdf` (6 pages) et `teaser/corbeille-story.png` (9:16), générés depuis `teaser/index.html` et `teaser/story.html`.
+`teaser/corbeille-teaser.pdf` (21 pages, 1080 × 1920) et `teaser/corbeille-story.png` (9:16), générés depuis `teaser/index.html` et `teaser/story.html` (capture page par page). Les pages des prochains lots utilisent `teaser/maquettes.js`.
 Ouverts dans Safari sur un appareil Apple, ces deux fichiers HTML affichent la vraie police de l'appli (SF Pro Rounded).

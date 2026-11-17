@@ -27,17 +27,20 @@ export async function ecrire(cle, valeur) {
   });
 }
 
-export const etat = { produits: {}, meta: {}, reglages: { semaines: 1, seuilTop: 365 }, liste: [] };
+export const etat = { produits: {}, meta: {}, reglages: { semaines: 1, seuilTop: 365 }, liste: [], listeSupprimes: {} };
 
 export async function charger() {
   etat.produits = await lire('produits', {});
   etat.meta = await lire('meta', {});
   etat.reglages = { ...etat.reglages, ...(await lire('reglages', {})) };
   etat.liste = await lire('liste', []);
+  etat.listeSupprimes = await lire('listeSupprimes', {});
   return etat;
 }
 export const sauverReglages = () => ecrire('reglages', etat.reglages);
-export const sauverListe = () => ecrire('liste', etat.liste);
+export async function sauverListe() {
+  await ecrire('liste', etat.liste); await ecrire('listeSupprimes', etat.listeSupprimes); await ecrire('listeAEnvoyer', true);
+}
 
 export function trouver(code) {
   const P = etat.produits;
@@ -57,7 +60,7 @@ function periodeDepuisNom(nom) {
 }
 
 /** Importe un export StorePOS (fichier produits ou fichier de ventes). Le type est reconnu tout seul. */
-export async function importerFichier(file) {
+export async function importerFichier(file, origine = {}) {
   const ab = await file.arrayBuffer();
   let rows;
   if (/\.xlsx$/i.test(file.name)) rows = await readXlsx(ab);
@@ -106,7 +109,7 @@ export async function importerFichier(file) {
     // les produits absents du nouveau fichier n'ont pas vendu sur la période
     for (const e of Object.keys(P)) if (!vus.has(e)) P[e] = { ...P[e], q: 0 };
   }
-  const meta = { ...etat.meta, [type]: { nom: file.name, lignes: n, date: new Date().toISOString(), ...(type === 'ventes' ? periodeDepuisNom(file.name) : {}) } };
+  const meta = { ...etat.meta, [type]: { nom: file.name, lignes: n, date: new Date().toISOString(), ...origine, ...(type === 'ventes' ? periodeDepuisNom(file.name) : {}) } };
   await ecrire('produits', P); await ecrire('meta', meta);
   etat.produits = P; etat.meta = meta;
   try { navigator.storage && navigator.storage.persist && navigator.storage.persist(); } catch (e) { }
