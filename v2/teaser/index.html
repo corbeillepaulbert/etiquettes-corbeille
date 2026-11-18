@@ -9,7 +9,8 @@ import { icone } from '../js/icones.js';
 import { calculAchat, euros } from '../js/calcul.js';
 import { META, AYRAN_1L, YAOURT_1KG, AYRAN_25 } from './donnees-exemple.js';
 import { HARISSA, POIS_CHICHES, HUILE_5L, PRINCE, COCA_15, OIGNON_5KG } from './donnees-exemple.js';
-import { blocStock, ecranAchatStock, calculStock, ecranListe, ecranEtiquettes, planche, affiche, ecranFacture, ecranEnvoiCaisse, ecranInconnu, ecranPin, ecranInventaire, ecranMac } from './maquettes.js';
+import { blocStock, ecranAchatStock, calculStock, ecranListe, ecranEtiquettes, planche, affiche, ecranFacture, ecranEnvoiCaisse, ecranInconnu, ecranPin, ecranInventaire, ecranMac, tuileRamadan, ecranRamadan } from './maquettes.js';
+const RAM = (await (await fetch('../donnees/ramadan.json')).json()).ramadans;
 const R = { semaines: 1, seuilTop: 365 };
 const AUJ = new Date('2026-11-17T09:00:00');
 const COURT = { jours: 365, dluo: new Date('2026-12-12T09:00:00'), marge: 3, horizonMax: 90, aujourdHui: AUJ };
@@ -26,7 +27,7 @@ brut(`<section class="page"><div class="marque"><i></i>La Corbeille Paul Bert</d
   <div class="couv__pied">iPhone · iPad · Mac</div></section>`);
 
 page('Tout le magasin, dans la poche.', 'Une seule appli pour ce qui prenait des heures au bureau.', `<div class="sommaire">
-  ${[['var(--corbeille)', 'En rayon', 'prix, ventes, étiquettes'], ['var(--achat)', 'À l’achat', 'combien d’un coup'], ['var(--corbeille)', 'Étiquettes', 'planches et affiches'], ['var(--encre)', 'Factures', 'lues, vérifiées'], ['var(--encre)', 'Caisse', 'fichier StorePOS prêt'], ['var(--abricot)', 'Produits nouveaux', 'créés en un geste'], ['var(--inventaire)', 'Inventaire', 'compté au scan'], ['var(--achat)', 'iPhone, iPad, Mac', 'les mêmes mots']].map(([c, t, s]) => `<div><i style="background:${c}"></i>${t}<span>${s}</span></div>`).join('')}</div>`);
+  ${[['var(--corbeille)', 'En rayon', 'prix, ventes, étiquettes'], ['var(--achat)', 'À l’achat', 'combien d’un coup'], ['var(--corbeille)', 'Étiquettes', 'planches et affiches'], ['var(--encre)', 'Factures', 'lues, vérifiées'], ['var(--encre)', 'Caisse', 'fichier StorePOS prêt'], ['var(--abricot)', 'Produits nouveaux', 'créés en un geste'], ['var(--inventaire)', 'Inventaire', 'compté au scan'], ['var(--abricot)', 'Ramadan', 'préparé un mois avant'], ['var(--achat)', 'iPhone, iPad, Mac', 'les mêmes mots']].map(([c, t, s]) => `<div><i style="background:${c}"></i>${t}<span>${s}</span></div>`).join('')}</div>`);
 
 page('Trois gestes, rien de caché.', 'Magasin, Achat, Inventaire. Tout part de l’accueil, en grand, sans menu à chercher.',
   tel(ecranAccueil({ bonjour: 'Bonjour', date: 'Mardi 17 novembre', aTraiter: 2 })));
@@ -41,6 +42,19 @@ page('Si la date le permet, trois mois.', 'Sur un produit qui se garde, l’appl
 const sc = calculStock(AYRAN_25, COURT), sh = calculStock(HARISSA, LONG), sp = calculStock(POIS_CHICHES, LONG), sy = calculStock(YAOURT_1KG, { ...COURT, dluo: new Date('2026-12-05T09:00:00') });
 page('Une liste, et c’est parti.', 'Chaque produit noté avec sa quantité et sa date de fin. On scanne en rayon chez Metro.',
   tel(ecranListe([{ lib: AYRAN_25.lib, qte: sc.qte, jusqu: sc.jusqu }, { lib: YAOURT_1KG.lib, qte: sy.qte, jusqu: sy.jusqu }, { lib: HARISSA.lib, qte: sh.qte, jusqu: sh.jusqu }, { lib: POIS_CHICHES.lib, qte: sp.qte, jusqu: sp.jusqu }], sy.jusqu)));
+// ---- Mode Ramadan : le jour de la démo est J-30 du Ramadan 2027 (date de la table embarquée) ----
+const R27 = RAM.find(r => r.annee === 2027), D27 = new Date(R27.debut + 'T09:00:00'), AID27 = new Date(R27.aid + 'T09:00:00');
+const J30 = new Date(D27.getTime() - 30 * 864e5), JOURS = Math.round((D27 - J30) / 864e5);
+const dateJ30 = J30.toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long' }).replace(/^./, c => c.toUpperCase());
+page('Le Ramadan, un mois à l’avance.', 'Il recule de 11 jours chaque année. L’appli connaît ses dates et prévient 30 jours avant, sur l’accueil.',
+  tel(ecranAccueil({ bonjour: 'Bonjour', date: dateJ30, aTraiter: 1 }).replace('<div class="duo">', tuileRamadan(JOURS, D27) + '<div class="duo">')));
+const PHARES = [
+  { lib: 'DATTES RAVIERS 500G', prix: 1.99, an: 150, tendance: 10, prevois: 165, garde: 'un an' },
+  { lib: '1L LAIT FERMENTE LABEN', prix: 2.20, an: 310, tendance: 6, prevois: 330, garde: '15 jours', maintenant: 110, enPlusieurs: 2 },
+  { lib: '10 FEUILLES DE BRICK J-C', prix: 1.00, an: 180, tendance: 5, prevois: 190, garde: 'deux mois' },
+  { lib: 'CHORBA IDEAL 110G', prix: 1.90, an: 48, tendance: 15, prevois: 55, garde: 'un an' }
+];
+pages.push((n, t) => `<section class="page"><div class="marque"><i></i>Corbeille</div><div class="num">${n} / ${t}</div><div class="entete"><h1 class="titre">Ramadan contre Ramadan.</h1><p class="phrase">L’an dernier, la tendance du moment, la date limite : une quantité par produit, prête pour la liste.</p></div>${tel(ecranRamadan({ jours: JOURS, debut: D27, aid: AID27, produits: PHARES }))}<div class="ram-exemple">Vrais produits et vrais prix de la caisse. Quantités d’exemple.</div></section>`);
 const ETQ = [{ ...POIS_CHICHES }, { ...HUILE_5L }, { ...PRINCE, top: true }, { ...COCA_15, top: true }, { ...AYRAN_1L, top: true }, { ...YAOURT_1KG, top: true }];
 page('L’étiquette, en vrai.', 'Nom en très gros, prix, prix au kilo, code-barres. On la voit à sa taille avant d’imprimer.',
   tel(ecranEtiquettes([ETQ[0], ETQ[1], ETQ[2], ETQ[4]])));
