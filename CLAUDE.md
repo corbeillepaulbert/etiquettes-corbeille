@@ -48,7 +48,9 @@ Appli de La Corbeille Paul Bert. Deux versions cohabitent sur le même site GitH
 ## Script Apps Script
 
 - Source : `apps-script/Code.gs` (sans aucun secret ni identifiant de dossier). Installation décrite en tête du fichier.
-- Écritures du script : uniquement `createFolder` (APPLI V2, une fois), `createFile` et `setContent` sur les fichiers JSON de APPLI V2.
+- Écritures du script : uniquement `createFolder` (APPLI V2 et son sous-dossier FACTURES_CACHE, une fois chacun), `createFile` et `setContent` sur les fichiers JSON de APPLI V2 (dont `FACTURES_CACHE/{idFacture}.json`).
+- Cache de lecture des factures : le script ne sait pas lire un PDF sans écrire dans le Drive (OCR de l'API Drive avancée = écriture interdite). C'est donc l'appli qui lit la facture (règles V1) et envoie fournisseur / montant / nombre de produits (`cacheEcrire`) ; le script les garde avec, pour empreinte, la date de modification du PDF, et ne les rend (`cacheLire`) que si elle n'a pas changé.
+- Version du script : `ping` renvoie `version`. L'appli exige la version 4 ou plus (Réglages → « Tester la connexion Apps Script »).
 
 ## Code de la V2
 

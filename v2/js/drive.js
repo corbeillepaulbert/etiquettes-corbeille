@@ -16,8 +16,12 @@ export async function relier(url, cle) {
 }
 export async function delier() { config = null; await ecrire('drive', null); }
 
+const ACTIONS_AT = new Set(['aTraiter', 'rafraichir', 'traiter', 'facture', 'cacheLire', 'cacheEcrire', 'ping']);
+export const VERSION_SCRIPT_MIN = 4; // version de Code.gs attendue par cette appli
 export async function appel(action, donnees = {}, cfg = config) {
   if (!cfg) throw new Error('pas relié au Drive');
+  const log = ACTIONS_AT.has(action);
+  if (log) console.log(`[V2/ATraiter] appel « ${action} »`);
   const ctl = new AbortController(); const t = setTimeout(() => ctl.abort(), 45000);
   try {
     const r = await fetch(cfg.url, {
@@ -26,8 +30,11 @@ export async function appel(action, donnees = {}, cfg = config) {
       body: JSON.stringify({ ...donnees, action, cle: cfg.cle })
     });
     if (!r.ok) throw new Error('le Drive ne répond pas (' + r.status + ')');
-    return await r.json();
+    const rep = await r.json();
+    if (log) console.log(`[V2/ATraiter] réponse « ${action} » : ok=${rep && rep.ok}${rep && rep.erreur ? ' erreur=' + rep.erreur : ''}`);
+    return rep;
   } catch (x) {
+    if (log) console.error(`[V2/ATraiter] échec « ${action} » : ${x && x.name === 'AbortError' ? 'délai dépassé' : (x && x.message || x)}`);
     if (x.name === 'AbortError') throw new Error('le Drive met trop de temps à répondre');
     if (x instanceof TypeError) throw new Error('pas de réseau');
     throw x;
@@ -38,7 +45,7 @@ export async function appel(action, donnees = {}, cfg = config) {
 export async function aTraiterEnCache() { return lire('aTraiter', { derniere: null, elements: [] }); }
 async function garder(r) {
   const v = { derniere: r.derniere, elements: r.elements || [], recu: new Date().toISOString() };
-  console.info(`[À traiter] Drive : ${v.elements.length} élément(s), dernier passage ${v.derniere || 'jamais'}, reçu ${v.recu}`);
+  console.log(`[V2/ATraiter] reçu : ${v.elements.length} élément(s), dernier passage ${v.derniere || 'jamais'}`);
   await ecrire('aTraiter', v); return v;
 }
 export async function majATraiter() { const r = await appel('aTraiter'); if (!r.ok) throw new Error('refusé'); return garder(r); }
@@ -46,6 +53,28 @@ export async function rafraichirMaintenant() { const r = await appel('rafraichir
 export async function marquerTraite(id, traite, par) {
   const r = await appel('traiter', { id, etat: traite ? 'traite' : 'nouveau', par });
   if (!r.ok) throw new Error('refusé'); return garder(r);
+}
+
+/** Test de la liaison (Réglages) : le script répond-il, et est-il assez récent ? */
+export async function testerScript() {
+  try {
+    const r = await appel('ping');
+    if (!r || !r.ok) return { ok: false, message: 'Le script ne répond pas ou ne connaît pas l\'action ping. Recopie Code.gs et redéploie (Nouvelle version).' };
+    const v = Number(r.version) || 0;
+    if (v < VERSION_SCRIPT_MIN) return { ok: false, version: v, message: `Le script répond mais il est ancien (version ${v}, il faut la ${VERSION_SCRIPT_MIN}). Recopie Code.gs et redéploie (Nouvelle version).` };
+    return { ok: true, version: v, message: `Le script répond (version ${v}).` };
+  } catch (x) {
+    return { ok: false, message: 'Le script ne répond pas ou ne connaît pas l\'action ping. Recopie Code.gs et redéploie (Nouvelle version).' + (x && x.message ? ` (${x.message})` : '') };
+  }
+}
+
+// ---------- cache de lecture des factures (écrit par le script dans APPLI V2/FACTURES_CACHE) ----------
+export async function lireCache(ids) {
+  const r = await appel('cacheLire', { ids }); if (!r.ok) throw new Error(r.erreur || 'refusé');
+  return r.cache || {};
+}
+export async function ecrireCache(id, { fournisseur, montant, nb }) {
+  const r = await appel('cacheEcrire', { id, fournisseur, montant, nb }); return !!(r && r.ok);
 }
 
 // ---------- exports StorePOS ----------

@@ -5,7 +5,7 @@ import { icone } from './icones.js';
 import { euros } from './calcul.js';
 import { configurer, nameOf, modelOf, isTop, cleanName, chk, labelStd, labelTop, pagesGondole, buildPdf, fitName } from './moteur/etiquettes.js';
 import { ouvrirScanner } from './moteur/scan.js';
-import { livrer } from './livrer.js';
+import { telecharger } from './livrer.js';
 
 const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 const E = { codes: [], noms: {}, force: {}, historique: [], pdf: null, vue: 'planche', page: 0 };
@@ -96,7 +96,8 @@ export function ecranEtiquettes(nav, message = '') {
     ${message ? `<div class="bandeau bandeau--alerte">${icone('info', 'cb-ico cb-ico--24')}<span>${message}</span></div>` : ''}
     ${E.pdf ? `<div class="carte" style="display:grid;gap:12px;box-shadow:inset 0 0 0 2px var(--corbeille)"><div class="titre-2">PDF prêt</div>
         <div class="note">${esc(E.pdf.nom)} · ${E.pdf.pages} page${E.pdf.pages > 1 ? 's' : ''} A4. Impression à 100 %, sans ajuster à la page.</div>
-        <button class="btn btn--principal" data-action="etiq-partager">${icone('imprimer')}Imprimer ou enregistrer</button></div>` : ''}
+        <div class="btns-pdf">${typeof navigator.share === 'function' ? `<button class="btn btn--principal" data-action="etiq-partager">${icone('imprimer')}Partager</button>` : ''}
+          <button class="btn ${typeof navigator.share === 'function' ? 'btn--secondaire' : 'btn--principal'}" data-action="etiq-enregistrer">${icone('import')}Enregistrer le PDF</button></div></div>` : ''}
     ${l.length ? (E.vue === 'etiquette'
       ? `<canvas class="apercu-etiq" data-apercu aria-label="Aperçu de la première étiquette"></canvas>
       <button class="btn btn--secondaire" data-action="etiq-vue" data-v="planche">Voir la planche</button>`
@@ -181,9 +182,27 @@ async function creerPdf(nav, bouton) {
   } catch (x) { ecranEtiquettes(nav, `Le PDF n'a pas pu être fabriqué : ${esc(x.message)}`); }
 }
 
+const fichierPdf = () => new File([E.pdf.blob], E.pdf.nom, { type: 'application/pdf' });
+/** « Partager » : feuille de partage du système (navigator.share). Rien d'autre : si elle échoue, on le dit et « Enregistrer le PDF » reste là. */
 async function partager(nav) {
   if (!E.pdf) return;
-  await livrer(new File([E.pdf.blob], E.pdf.nom, { type: 'application/pdf' }));
+  const f = fichierPdf();
+  try {
+    if (navigator.canShare && !navigator.canShare({ files: [f] })) throw new Error('partage de fichier non pris en charge ici');
+    await navigator.share({ files: [f], title: E.pdf.nom });
+  } catch (x) {
+    if (x && x.name === 'AbortError') return;
+    console.error('[V2/PDF] partage impossible :', x && x.message);
+    nav.toast('Le partage n\'a pas marché : touche « Enregistrer le PDF ».');
+  }
+}
+/** « Enregistrer le PDF » : téléchargement direct, sans navigator.share, sur toutes les plateformes. */
+function enregistrer(nav) {
+  if (!E.pdf) return;
+  const f = fichierPdf();
+  console.log(`[V2/PDF] enregistrement : ${f.name}, ${f.size} octets, ${f.type}`);
+  if (!f.size) { nav.toast('Le PDF est vide : recrée-le.'); return; }
+  telecharger(f);
 }
 
 /** Actions de l'écran ; renvoie true si l'action a été prise en charge. */
@@ -209,6 +228,7 @@ export async function actionEtiquettes(a, b, nav) {
   }
   if (a === 'etiq-pdf') { await creerPdf(nav, b); return true; }
   if (a === 'etiq-partager') { await partager(nav); return true; }
+  if (a === 'etiq-enregistrer') { enregistrer(nav); return true; }
   if (a === 'etiq-reprendre') {
     const h = E.historique[+b.dataset.i]; if (!h) return true;
     const avant = E.codes.slice();

@@ -168,3 +168,34 @@ html,body{margin:0;background:var(--papier)}
 .visionneuse__bas{padding:10px 10px max(10px,env(safe-area-inset-bottom));background:#111}
 .ligne button.ligne__txt{height:auto;min-height:0;padding:0;overflow-wrap:anywhere;word-break:break-word;background:none;border:0;text-align:left;color:inherit}
 .ligne button.ligne__ico{padding:0}
+/* À traiter : file d'attente de factures */
+.at-onglets{display:grid;grid-template-columns:repeat(3,1fr);gap:6px;background:var(--carte);padding:6px;border-radius:var(--rayon-m);box-shadow:var(--ombre-carte)}
+.at-on{min-height:56px;border:0;border-radius:10px;background:none;font:700 18px/20px var(--font-texte);color:var(--encre-2);display:grid;place-items:center;align-content:center;padding:4px}
+.at-on b{font:800 22px/22px var(--font-titre);color:inherit}
+.at-on--actif{background:var(--corbeille);color:#fff}
+.at-carte{background:var(--carte);border-radius:var(--rayon-m);box-shadow:var(--ombre-carte);padding:var(--espace-4);display:grid;gap:var(--espace-3);border-left:8px solid var(--abricot)}
+.at-carte--vieux{border-left-color:#F2C896}
+.at-carte--cours{border-left-color:var(--achat)}
+.at-carte--fait{border-left-color:var(--trait);background:#EFEBE3;box-shadow:none}
+.at-carte--fait .at-four,.at-carte--fait .at-mt{color:var(--encre-2)}
+.at-l1{display:flex;justify-content:space-between;align-items:flex-start;gap:var(--espace-2)}
+.at-four{font:800 28px/1.1 var(--font-titre);overflow-wrap:anywhere;min-width:0}
+.at-badge{font:700 18px/1 var(--font-texte);padding:8px 12px;border-radius:var(--rayon-plein);white-space:nowrap}
+.at-badge--neuf{background:#F9C38F;color:#4A2A00}
+.at-badge--vieux{background:var(--alerte-fond);color:var(--alerte)}
+.at-badge--cours{background:var(--achat-clair);color:var(--achat)}
+.at-badge--fait{background:var(--succes-fond);color:var(--succes)}
+.at-date{font:600 20px/1.2 var(--font-texte)}
+.at-sous{font:600 18px/24px var(--font-texte);color:var(--alerte)}
+.at-note{font:400 18px/24px var(--font-texte);color:var(--encre-2)}
+.at-infos{display:flex;gap:var(--espace-5);align-items:baseline;flex-wrap:wrap}
+.at-mt{font:800 28px/1 var(--font-titre)}
+.at-nb{font:400 18px var(--font-texte);color:var(--encre-2)}
+.at-traiter{min-height:var(--cible-principale)}
+.at-liens{display:flex;justify-content:center;gap:var(--espace-5);flex-wrap:wrap}
+.at-lien{min-height:48px;padding:0 var(--espace-2);background:none;border:0;font:600 18px var(--font-texte);color:var(--corbeille);text-decoration:underline;text-underline-offset:4px}
+.at-lien--gris{color:var(--encre-2)}
+.at-lien--centre{width:100%}
+.btns-pdf{display:grid;gap:var(--espace-3);grid-template-columns:1fr}
+@media (min-width:600px){.btns-pdf{grid-template-columns:1fr 1fr}}
+.btns-pdf .btn{min-height:var(--cible-principale)}

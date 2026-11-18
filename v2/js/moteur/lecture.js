@@ -8,7 +8,7 @@ export async function ocrImage(file,onp){if(!window.Tesseract){await new Promise
 async function prepImage(file){const bmp=await createImageBitmap(file);const sc=Math.min(1,2600/Math.max(bmp.width,bmp.height));const c=document.createElement('canvas');c.width=bmp.width*sc;c.height=bmp.height*sc;const x=c.getContext('2d');x.drawImage(bmp,0,0,c.width,c.height);
  const d=x.getImageData(0,0,c.width,c.height),a=d.data;for(let i=0;i<a.length;i+=4){const g=.3*a[i]+.59*a[i+1]+.11*a[i+2];const v=g>150?255:g<90?0:(g-90)*4.25;a[i]=a[i+1]=a[i+2]=v}x.putImageData(d,0,0);return c}
 // texte d'un PDF, ligne par ligne ; une page sans texte (scan) est rendue en image pour la lecture optique
-async function pdfRead(file){const L=await pdfLib();const doc=await L.getDocument({data:new Uint8Array(await file.arrayBuffer())}).promise;let text='';const imgs=[];
+export async function pdfRead(file){const L=await pdfLib();const doc=await L.getDocument({data:new Uint8Array(await file.arrayBuffer())}).promise;let text='';const imgs=[];
  for(let p=1;p<=doc.numPages;p++){const pg=await doc.getPage(p);const tc=await pg.getTextContent();const it=tc.items.filter(i=>i.str&&i.str.trim());
   if(it.length<15){const vp=pg.getViewport({scale:2.6});const c=document.createElement('canvas');c.width=vp.width;c.height=vp.height;await pg.render({canvasContext:c.getContext('2d'),viewport:vp}).promise;imgs.push(c);continue}
   const rows=[];for(const i of it){const y=i.transform[5];let r=rows.find(r=>Math.abs(r.y-y)<3);if(!r){r={y,a:[]};rows.push(r)}r.a.push({x:i.transform[4],s:i.str.trim()})}

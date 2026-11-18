@@ -6,11 +6,13 @@ import { icone } from './icones.js';
 import { ouvrirScanner, ecouterDouchette, bip } from './moteur/scan.js';
 import { lire, ecrire } from './donnees.js';
 import { chargerEtiquettes, actionEtiquettes } from './etiquettes.js';
-import { filtrer } from './fournisseurs.js';
+import { filtrer, fournisseursCaisse } from './fournisseurs.js';
 import { chercher } from './recherche.js';
 import { ouvrirVisionneuse } from './visionneuse.js';
-import { chargerFacture, actionFacture, brancherFacture } from './facture.js';
-import { chargerConfig, estRelie, relier, delier, aTraiterEnCache, majATraiter, rafraichirMaintenant, marquerTraite, prendreExports, synchroniserListe, fichierFacture } from './drive.js';
+import { chargerFacture, actionFacture, brancherFacture, estEnCours, reprendreEnCours, retirerEnCours, restaurerEnCours } from './facture.js';
+import { ecranATraiter, choisirOnglet, nomFournisseur } from './atraiter.js';
+import { chargerLectures, chargerCache, lirePremieres } from './lectures.js';
+import { chargerConfig, estRelie, relier, delier, aTraiterEnCache, majATraiter, rafraichirMaintenant, marquerTraite, prendreExports, synchroniserListe, fichierFacture, testerScript } from './drive.js';
 
 const app = document.getElementById('app');
 const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
@@ -188,6 +190,7 @@ function reglages() {
     <div class="carte" style="display:grid;gap:12px">
       <div class="titre-3">Liaison avec le Drive</div>
       ${estRelie() ? `<div class="bandeau" style="background:var(--succes-fond);color:var(--succes)">${icone('check', 'cb-ico cb-ico--24')}<span>Relié au Drive du magasin</span></div>
+        <button class="btn btn--secondaire" data-action="tester-script" style="width:100%">Tester la connexion Apps Script</button><div data-msg-test></div>
         <button class="btn btn--secondaire" data-action="delier" style="width:100%">Délier cet appareil</button>`
       : `<div class="note">Adresse et clé fournies à l'installation du script. Elles restent sur cet appareil.</div>
         <label class="fort" for="drv-url">Adresse (finit par /exec)</label><input class="champ" id="drv-url" autocomplete="off" autocapitalize="off" spellcheck="false" style="font-size:18px">
@@ -201,29 +204,24 @@ function reglages() {
   <div class="scr__bas"><button class="btn btn--principal" data-action="fin-reglages">Terminé</button></div></div>`, 'reglages');
 }
 
+const nomVu = x => `${nomFournisseur(x, fournisseursCaisse())} · ${new Date((x.date || String(x.cree).slice(0, 10)) + 'T12:00').toLocaleDateString('fr-FR', { day: 'numeric', month: 'long' })}`;
+let erreurAT = '';
+const MSG_ERREUR_DRIVE = 'Erreur de connexion au Drive. Vérifie que Code.gs est à jour et redéployé.';
 function aTraiter(message = '') {
-  if (!estRelie()) {
-    afficher(`<div class="scr cb">${barreMode('magasin', 'À traiter', true)}<div class="scr__corps"><h1 class="titre-1">À traiter</h1>
-      <div class="carte"><div class="titre-2">Pas encore relié au Drive.</div><div class="note" style="margin-top:8px">Relie l'appli dans Réglages pour voir arriver les factures toutes seules.</div></div></div>
-      <div class="scr__bas"><button class="btn btn--principal" data-action="reglages">Ouvrir les réglages</button></div></div>`, 'atraiter');
-    return;
-  }
-  const vue = vueAT(), el = vue.gardes;
-  const nouv = el.filter(x => x.etat === 'nouveau'), faits = el.filter(x => x.etat === 'traite').slice(0, 10);
-  const ligne = x => `<div class="ligne"><button class="ligne__ico" data-action="at-voir" data-id="${esc(x.id)}" aria-label="Voir la facture" style="border:0;font:inherit">${icone('facture')}</button>
-    <button class="ligne__txt" data-action="at-voir" data-id="${esc(x.id)}" style="font:inherit"><div class="ligne__titre">${esc(x.nom)}</div><div class="ligne__detail">${esc(x.dossier || 'FACTURES ACHAT')} · ${new Date((x.date || String(x.cree).slice(0, 10)) + 'T12:00').toLocaleDateString('fr-FR', { day: 'numeric', month: 'short' })}${x.etat === 'traite' && x.traitePar ? ` · traitée par ${esc(x.traitePar)}` : ''}</div></button>
-    ${x.etat === 'nouveau' ? `<button class="btn btn--secondaire" data-action="traite" data-id="${esc(x.id)}">Traitée</button>` : `<span class="pastille pastille--ok">Traitée</span>`}</div>`;
-  afficher(`<div class="scr cb">${barreMode('magasin', 'À traiter', true)}
-  <div class="scr__corps">
-    <div class="accueil__haut"><h1 class="titre-1">À traiter</h1>${nouv.length ? `<span class="compteur">${nouv.length}</span>` : ''}</div>
-    <div class="note" data-verif>${cacheAT.derniere ? `Drive vérifié à ${heure(cacheAT.derniere)}` : 'Pas encore vérifié'}${cacheAT.recu ? ` · reçu à ${heure(cacheAT.recu)}` : ''}</div>
-    ${vue.masques.length ? `<details class="note"><summary style="min-height:48px;display:flex;align-items:center">${vue.masques.length} facture(s) masquée(s) : fournisseur absent de StorePOS</summary>${vue.masques.slice(0, 15).map(x => `<div>${esc(x.nom)}</div>`).join('')}</details>` : ''}
-    ${!vue.actif ? `<div class="note">Filtre fournisseurs inactif : charge d'abord les produits.</div>` : ''}
-    ${message ? `<div class="bandeau bandeau--alerte">${icone('info', 'cb-ico cb-ico--24')}<span>${esc(message)}</span></div>` : ''}
-    ${nouv.length ? nouv.map(ligne).join('') : `<div class="carte"><div class="titre-2">Rien à traiter.</div><div class="note" style="margin-top:8px">Les nouvelles factures du dossier FACTURES ACHAT arrivent ici toutes seules, toutes les 15 minutes.</div></div>`}
-    ${faits.length ? `<h2 class="titre-3" style="margin-top:8px">Déjà traitées</h2>${faits.map(ligne).join('')}` : ''}
-  </div>
-  <div class="scr__bas"><button class="btn btn--principal" data-action="rafraichir">${icone('import')}Rafraîchir maintenant</button></div></div>`, 'atraiter');
+  const vue = vueAT();
+  const ancien = estRelie() && (cacheAT.elements || []).some(x => !x.date); // un script d'avant la version 4 ne renvoie pas la date de facture
+  const erreur = estRelie() && navigator.onLine ? (erreurAT || (ancien ? MSG_ERREUR_DRIVE + ' (script ancien)' : '')) : '';
+  const st = ecranCourant === 'atraiter' ? (document.querySelector('.scr__corps')?.scrollTop || 0) : 0;
+  afficher(ecranATraiter({ relie: estRelie(), elements: vue.gardes, masques: vue.masques, actif: vue.actif, recu: cacheAT.recu, derniere: cacheAT.derniere, message, erreur, liste: fournisseursCaisse() }), 'atraiter');
+  if (st && ecranCourant === 'atraiter') document.querySelector('.scr__corps').scrollTop = st;
+}
+/** Montants et nombres de produits : cache du Drive d'abord, puis première lecture des PDF qui n'en ont pas encore. */
+async function chargerEnFond() {
+  if (!estRelie() || !navigator.onLine) return;
+  const el = vueAT().gardes;
+  try { if (await chargerCache(el) && ecranCourant === 'atraiter') aTraiter(); }
+  catch (x) { console.error('[V2/ATraiter] cache illisible :', x.message); }
+  lirePremieres(el, { quandFini: () => { if (ecranCourant === 'atraiter') aTraiter(); }, encore: () => ecranCourant === 'atraiter' });
 }
 
 function pasEncore(quoi) {
@@ -251,18 +249,42 @@ const nav = { afficher: (h, n) => afficher(h, n), toast: (t, f) => toast(t, f), 
 app.addEventListener('click', async e => {
   const b = e.target.closest('[data-action]'); if (!b) return;
   const a = b.dataset.action;
+  if (/^at-/.test(a) || a === 'rafraichir' || a === 'traite' || a === 'a-traiter' || a === 'tester-script') console.log(`[V2/ATraiter] clic « ${a} »${b.dataset.id ? ' facture ' + b.dataset.id : ''}`);
   if (await actionEtiquettes(a, b, nav)) return;
   if (await actionFacture(a, b, nav)) return;
   if (a === 'accueil') return accueil();
   if (a === 'mode') { if (b.dataset.mode === 'inventaire') return pasEncore('inventaire'); return ouvrirMode(b.dataset.mode); }
+  if (a === 'at-onglet') { choisirOnglet(b.dataset.o); aTraiter(); document.querySelector('.scr__corps').scrollTop = 0; return; }
   if (a === 'at-voir') {
     const id = b.dataset.id, x = (cacheAT.elements || []).find(y => y.id === id); if (!x) return;
-    b.disabled = true;
+    const texte = b.textContent; b.disabled = true; b.textContent = 'Ouverture…';
     try {
       const f = await fichierFacture(id);
-      b.disabled = false;
-      await ouvrirVisionneuse(f, x.nom, () => actionFacture('fac-ouvrir', { dataset: { id } }, nav));
-    } catch (er) { b.disabled = false; aTraiter(`Aperçu impossible : ${er.message}.`); }
+      b.disabled = false; b.textContent = texte;
+      console.log(`[V2/ATraiter] aperçu : ${f.name}, ${f.size} octets, ${f.type}`);
+      await ouvrirVisionneuse(f, nomVu(x), () => actionFacture('fac-ouvrir', { dataset: { id, date: x.date || '' } }, nav));
+    } catch (er) { console.error('[V2/ATraiter] aperçu impossible :', er.message); aTraiter(`Aperçu impossible : ${er.message}.`); }
+    return;
+  }
+  if (a === 'at-traiter') {
+    const id = b.dataset.id, date = b.dataset.date || '';
+    b.disabled = true;
+    try {
+      if (estEnCours(id) && await reprendreEnCours(id, nav)) return;
+      await actionFacture('fac-ouvrir', { dataset: { id, date } }, nav);
+    } catch (er) { console.error('[V2/ATraiter] ouverture impossible :', er.message); aTraiter(`Ouverture impossible : ${er.message}.`); }
+    return;
+  }
+  if (a === 'at-reessayer') {
+    b.disabled = true; b.textContent = 'Je réessaie…';
+    try { cacheAT = await majATraiter(); erreurAT = ''; } catch (x) { erreurAT = MSG_ERREUR_DRIVE; console.error('[V2/ATraiter] échec :', x.message); }
+    aTraiter(); chargerEnFond(); return;
+  }
+  if (a === 'tester-script') {
+    const zone = app.querySelector('[data-msg-test]'); zone.innerHTML = '<div class="note">Test du script…</div>';
+    const r = await testerScript();
+    zone.innerHTML = r.ok ? `<div class="bandeau" style="background:var(--succes-fond);color:var(--succes)">${icone('check', 'cb-ico cb-ico--24')}<span>${esc(r.message)}</span></div>`
+      : `<div class="bandeau bandeau--erreur">${icone('alerte', 'cb-ico cb-ico--24')}<span>${esc(r.message)}</span></div>`;
     return;
   }
   if (a === 'ouvrir-fiche') { const p = trouver(b.dataset.e); return p && fiche(p); }
@@ -271,16 +293,21 @@ app.addEventListener('click', async e => {
   if (a === 'donnees') return donnees();
   if (a === 'liste') { liste(); return syncFond(true); }
   if (a === 'reglages') return reglages();
-  if (a === 'a-traiter') return aTraiter();
+  if (a === 'a-traiter') { aTraiter(); chargerEnFond(); return; }
   if (a === 'rafraichir') {
     b.disabled = true; b.innerHTML = 'Je regarde le Drive…';
-    try { cacheAT = await rafraichirMaintenant(); aTraiter(cacheAT.occupe ? 'Un passage était déjà en cours : la liste est celle du dernier passage.' : ''); toast(cacheAT.ajoutes ? `${cacheAT.ajoutes} nouvelle(s) facture(s)` : 'Rien de nouveau sur le Drive'); }
-    catch (x) { aTraiter(`Impossible de joindre le Drive : ${x.message}.`); }
+    try { cacheAT = await rafraichirMaintenant(); erreurAT = ''; aTraiter(cacheAT.occupe ? 'Un passage était déjà en cours : la liste est celle du dernier passage.' : ''); toast(cacheAT.ajoutes ? `${cacheAT.ajoutes} nouvelle(s) facture(s)` : 'Rien de nouveau sur le Drive'); }
+    catch (x) { erreurAT = MSG_ERREUR_DRIVE; console.error('[V2/ATraiter] échec :', x.message); aTraiter(); }
+    chargerEnFond();
     return;
   }
   if (a === 'traite') {
     const id = b.dataset.id; b.disabled = true;
-    try { cacheAT = await marquerTraite(id, true, nomAppareil); aTraiter(); toast('Facture marquée traitée', async () => { try { cacheAT = await marquerTraite(id, false); } catch (x) { } aTraiter(); }); }
+    try {
+      const meta = await retirerEnCours(id);
+      cacheAT = await marquerTraite(id, true, nomAppareil); aTraiter();
+      toast('Facture marquée traitée', async () => { await restaurerEnCours(id, meta); try { cacheAT = await marquerTraite(id, false); } catch (x) { } aTraiter(); });
+    }
     catch (x) { b.disabled = false; toast(`Pas enregistré : ${x.message}`); }
     return;
   }
@@ -343,7 +370,7 @@ async function syncFond(force = false) {
   if (!force && Date.now() - dernierSync < 120000) return;
   syncEnCours = true; dernierSync = Date.now();
   try {
-    try { cacheAT = await majATraiter(); } catch (x) { }
+    try { cacheAT = await majATraiter(); erreurAT = ''; } catch (x) { erreurAT = MSG_ERREUR_DRIVE; console.error('[V2/ATraiter] échec :', x.message); }
     try {
       const faits = await prendreExports();
       if (faits.length) toast(`Mis à jour depuis le Drive : ${faits.map(r => r.type === 'ventes' ? 'ventes' : 'produits').join(' et ')}`);
@@ -353,7 +380,7 @@ async function syncFond(force = false) {
     syncEnCours = false;
     if (ecranCourant === 'accueil') accueil();
     else if (ecranCourant === 'liste') liste();
-    else if (ecranCourant === 'atraiter') aTraiter();
+    else if (ecranCourant === 'atraiter') { aTraiter(); chargerEnFond(); }
   }
 }
 window.addEventListener('online', () => syncFond(true));
@@ -365,6 +392,7 @@ document.addEventListener('visibilitychange', () => { if (document.visibilitySta
   await chargerConfig();
   await chargerEtiquettes();
   await chargerFacture();
+  await chargerLectures();
   cacheAT = await aTraiterEnCache();
   nomAppareil = await lire('nomAppareil', '');
   accueil();

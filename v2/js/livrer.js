@@ -1,6 +1,7 @@
 // Remettre un fichier à la personne : feuille de partage là où elle existe (iPhone, iPad), sinon téléchargement direct (Mac, ordinateur).
 // Détection par fonctionnalité (navigator.share), jamais par navigateur.
 export function telecharger(fichier) {
+  console.log(`[V2/PDF] téléchargement : ${fichier.name}, ${fichier.size} octets, ${fichier.type}`);
   const url = URL.createObjectURL(fichier);
   const a = document.createElement('a'); a.href = url; a.download = fichier.name; a.rel = 'noopener';
   document.body.appendChild(a); a.click(); a.remove();
