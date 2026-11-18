@@ -1,0 +1,23 @@
+{
+  "_note": "Dates du Ramadan en France : premier jour de jeûne et jour de l'Aïd el-Fitr, selon la Grande Mosquée de Paris (suivie par la majorité des fidèles). 'verifie' = date contrôlée sur les annonces officielles ; false = date connue, à confirmer d'un jour ; 'previsionnel' = calcul astronomique, à mettre à jour après la Nuit du doute.",
+  "pays": "France",
+  "ramadans": [
+    { "annee": 2014, "debut": "2014-06-28", "aid": "2014-07-28", "verifie": false },
+    { "annee": 2015, "debut": "2015-06-18", "aid": "2015-07-17", "verifie": false },
+    { "annee": 2016, "debut": "2016-06-06", "aid": "2016-07-06", "verifie": false },
+    { "annee": 2017, "debut": "2017-05-27", "aid": "2017-06-25", "verifie": false },
+    { "annee": 2018, "debut": "2018-05-17", "aid": "2018-06-15", "verifie": false },
+    { "annee": 2019, "debut": "2019-05-06", "aid": "2019-06-04", "verifie": false },
+    { "annee": 2020, "debut": "2020-04-24", "aid": "2020-05-24", "verifie": true },
+    { "annee": 2021, "debut": "2021-04-13", "aid": "2021-05-13", "verifie": true },
+    { "annee": 2022, "debut": "2022-04-02", "aid": "2022-05-02", "verifie": true },
+    { "annee": 2023, "debut": "2023-03-23", "aid": "2023-04-21", "verifie": true },
+    { "annee": 2024, "debut": "2024-03-11", "aid": "2024-04-10", "verifie": true },
+    { "annee": 2025, "debut": "2025-03-01", "aid": "2025-03-30", "verifie": true },
+    { "annee": 2026, "debut": "2026-02-18", "aid": "2026-03-20", "verifie": true, "remarque": "CFCM : début le 19 février" },
+    { "annee": 2027, "debut": "2027-02-08", "aid": "2027-03-10", "previsionnel": true },
+    { "annee": 2028, "debut": "2028-01-28", "aid": "2028-02-27", "previsionnel": true },
+    { "annee": 2029, "debut": "2029-01-16", "aid": "2029-02-15", "previsionnel": true },
+    { "annee": 2030, "debut": "2030-01-06", "aid": "2030-02-05", "previsionnel": true }
+  ]
+}

@@ -104,3 +104,21 @@ body{margin:0;background:#E9E4DA}
 .sommaire i{width:28px;height:28px;border-radius:50%;flex:none}
 .sommaire span{font:400 28px/36px var(--font-texte);color:var(--encre-2);margin-left:auto;text-align:right}
 .bientot{display:inline-block;margin-left:16px;vertical-align:middle;font:700 24px/1 var(--font-texte);background:var(--abricot);color:var(--encre);padding:10px 18px;border-radius:999px;letter-spacing:0}
+/* Mode Ramadan */
+.tuile--ramadan{background:var(--abricot);color:var(--encre)}
+.tuile--ramadan .cb-ico{color:var(--encre)}
+.ram-alerte{display:flex;align-items:center;gap:var(--espace-4);background:var(--encre);color:#fff;border-radius:var(--rayon-l);padding:var(--espace-4)}
+.ram-alerte b{display:block;font:700 24px/28px var(--font-titre)}
+.ram-alerte span{display:block;font:400 18px/24px var(--font-texte);color:#FFFFFFCC}
+.ram-lune{width:40px;height:40px;color:var(--abricot);flex:none}
+.ram-ligne{display:grid;gap:4px;padding:12px var(--espace-4)}
+.ram-haut{display:flex;justify-content:space-between;gap:var(--espace-3);align-items:baseline}
+.ram-nom{font:600 18px/22px var(--font-texte)}
+.ram-prix{font:700 18px/22px var(--font-titre);white-space:nowrap}
+.ram-phrase{font:400 18px/24px var(--font-texte)}
+.ram-phrase b{font:700 22px/24px var(--font-titre)}
+.ram-y{color:var(--achat)}
+.ram-detail{font:400 18px/22px var(--font-texte);color:var(--encre-2)}
+.ram-dluo{display:flex;gap:8px;align-items:center;background:var(--alerte-fond);color:var(--alerte);border-radius:var(--rayon-s);padding:6px 10px;font:600 18px/22px var(--font-texte)}
+.ram-dluo .cb-ico{width:22px;height:22px;flex:none}
+.ram-exemple{position:absolute;left:96px;right:96px;bottom:40px;font:400 24px/30px var(--font-texte);color:var(--encre-2);text-align:center}

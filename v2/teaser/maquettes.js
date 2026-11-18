@@ -180,3 +180,31 @@ export function blocStock(p, opts) {
     <div class="achat__qte"><b>${c.qte}</b><span>unités</span></div>
     <div class="raison" style="margin-top:12px">${icone('check', 'cb-ico cb-ico--24')}<span>Tu tiens jusqu'au <b>${jourMois(c.jusqu)}</b>${c.limitePar === 'date' ? ' (date limite)' : ''}</span></div></div>`;
 }
+
+// ---------- Mode Ramadan (lot 8) ----------
+// Quantités d'exemple pour la présentation : le calcul réel viendra des exports Vente PLU de chaque Ramadan passé.
+const lune = (cls = 'cb-ico') => `<svg class="${cls}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 14.5A8.5 8.5 0 1 1 9.5 4a7 7 0 0 0 10.5 10.5z"/><path d="M17 3l.6 1.4L19 5l-1.4.6L17 7l-.6-1.4L15 5l1.4-.6z"/></svg>`;
+
+/** La tuile qui apparaît sur l'accueil à J-30. */
+export function tuileRamadan(jours, debut) {
+  return `<button class="tuile tuile--ramadan">${lune()}<div><b>Préparer le Ramadan</b><span>Dans ${jours} jours · vers le ${jourMois(debut)}</span></div></button>`;
+}
+
+/** Un produit : ce qui s'est vendu pendant le dernier Ramadan, ce qu'il faut prévoir, et ce que la date limite permet. */
+function ligneRamadan(r) {
+  const t = `${r.tendance > 0 ? '↑ +' : r.tendance < 0 ? '↓ ' : '= '}${r.tendance} % en ce moment`;
+  return `<div class="carte ram-ligne">
+    <div class="ram-haut"><div class="ram-nom">${esc(joli(r.lib))}</div><div class="ram-prix">${euros(r.prix)}</div></div>
+    <div class="ram-phrase">L'an dernier tu as vendu <b>${r.an}</b>, cette année prévois <b class="ram-y">${r.prevois}</b></div>
+    <div class="ram-detail">${t} · se garde ${r.garde}</div>
+    ${r.enPlusieurs ? `<div class="ram-dluo">${icone('frais', 'cb-ico')}<span>Prends <b>${r.maintenant}</b> maintenant, le reste en ${r.enPlusieurs} fois</span></div>` : ''}
+  </div>`;
+}
+
+export function ecranRamadan({ jours, debut, aid, produits }) {
+  return scr('achat', 'Ramadan', `
+    <div class="ram-alerte"><div><b>Ramadan dans ${jours} jours</b><span>Du ${jourMois(debut)} à l'Aïd le ${jourMois(aid)}</span></div></div>
+    <div><h2 class="titre-2">Les produits phares</h2><div class="note">Moyenne de tes 3 derniers Ramadans, corrigée par les 3 dernières semaines.</div></div>
+    ${produits.map(ligneRamadan).join('')}`,
+    `<button class="btn btn--principal btn--achat">Ajouter les ${produits.length} à ma liste</button>`);
+}
