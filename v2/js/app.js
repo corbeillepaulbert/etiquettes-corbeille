@@ -246,7 +246,7 @@ function toast(texte, annuler) {
 }
 
 // ---------- actions ----------
-const nav = { afficher: (h, n) => afficher(h, n), toast: (t, f) => toast(t, f), donnees: m => donnees(m) };
+const nav = { afficher: (h, n) => afficher(h, n), toast: (t, f) => toast(t, f), donnees: m => donnees(m), sync: () => syncFond(true) };
 app.addEventListener('click', async e => {
   const b = e.target.closest('[data-action]'); if (!b) return;
   const a = b.dataset.action;
