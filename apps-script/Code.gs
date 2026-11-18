@@ -20,13 +20,14 @@
  *  - Le secret n'apparaît jamais dans un journal ni dans une réponse.
  */
 
-const VERSION = 2;
+const VERSION = 3;
 const NOM_FACTURES = 'FACTURES ACHAT';
 const NOM_EXPORTS = 'EXPORTS STOREPOS';
 const NOM_APPLI = 'APPLI ETIQUETTES CORBEILLE';
 const NOM_V2 = 'APPLI V2';
 const FICHIER_A_TRAITER = 'a-traiter.json';
 const JOURS_CLE_PRECEDENTE = 7;
+const FENETRE_JOURS = 90;
 const EXTENSIONS_FACTURE = /\.(pdf|jpe?g|png|heic)$/i;
 const EXTENSIONS_EXPORT = /\.(xlsx|csv|txt)$/i;
 
@@ -141,24 +142,36 @@ function ecrireJson(nom, valeur) {
 
 // ---------------------------------------------------------------- factures → À traiter
 
-/** Parcourt FACTURES ACHAT en lecture seule et ajoute les nouvelles factures à « À traiter ». */
+/** Date d'une facture : la dernière date AAAA-MM-JJ du nom, sinon la date de création. Jamais la date de modification
+ *  (les anciennes factures importées en bloc ont une date de modification récente). */
+function dateDuNom(nom, creeIso) {
+  const m = String(nom).match(/20\d{2}[-_.]\d{2}[-_.]\d{2}/g);
+  if (m) return m[m.length - 1].replace(/[_.]/g, '-');
+  return String(creeIso || '').slice(0, 10);
+}
+const limiteJours = jours => new Date(Date.now() - (jours || FENETRE_JOURS) * 864e5).toISOString().slice(0, 10);
+
+/** Parcourt FACTURES ACHAT en lecture seule et ajoute à « À traiter » les factures des 90 derniers jours (date du nom). */
 function chercherFactures() {
-  const p = props();
-  const depuis = Number(p.getProperty('DEPUIS') || (Date.now() - 7 * 864e5));
   const etat = lireJson(FICHIER_A_TRAITER, { derniere: null, elements: [] });
   const connus = new Set(etat.elements.map(x => x.id));
   const debut = new Date().toISOString();
-  const seuil = new Date(depuis).toISOString().slice(0, 19);
+  const limite = limiteJours();
+  const seuil = limite + 'T00:00:00'; // premier tri côté Drive ; le vrai filtre est la date du nom, ci-dessous
   let ajoutes = 0;
   const parcourir = (dossierCourant, chemin, profondeur) => {
     const fichiers = dossierCourant.searchFiles('modifiedDate > "' + seuil + '" and trashed = false');
     while (fichiers.hasNext()) {
       const f = fichiers.next();
+      if (connus.has(f.getId())) continue;
       const nom = f.getName();
-      if (connus.has(f.getId()) || !EXTENSIONS_FACTURE.test(nom)) continue;
+      if (!EXTENSIONS_FACTURE.test(nom)) continue;
+      const cree = f.getDateCreated().toISOString();
+      const date = dateDuNom(nom, cree);
+      if (date < limite) continue;
       etat.elements.push({
-        id: f.getId(), type: 'facture', nom, dossier: chemin,
-        cree: f.getDateCreated().toISOString(), maj: f.getLastUpdated().toISOString(),
+        id: f.getId(), type: 'facture', nom, dossier: chemin, date,
+        cree, maj: f.getLastUpdated().toISOString(),
         url: 'https://drive.google.com/file/d/' + f.getId() + '/view', etat: 'nouveau'
       });
       connus.add(f.getId()); ajoutes++;
@@ -168,17 +181,22 @@ function chercherFactures() {
     while (sous.hasNext()) { const d = sous.next(); parcourir(d, chemin ? chemin + ' › ' + d.getName() : d.getName(), profondeur + 1); }
   };
   parcourir(dossierFactures(), '', 0);
-  // on garde les éléments traités 30 jours, les nouveaux toujours
-  const limite = Date.now() - 30 * 864e5;
-  etat.elements = etat.elements.filter(x => x.etat !== 'traite' || Date.parse(x.traiteLe || x.cree) > limite);
+  etat.elements = gardeRecents(etat.elements);
   etat.derniere = debut;
   ecrireJson(FICHIER_A_TRAITER, etat);
   return { ajoutes };
 }
 
+/** Ne garde que les éléments des 90 derniers jours (date du nom). Sert aussi à vider ce qui a été stocké avant ce filtre. */
+function gardeRecents(elements) {
+  const limite = limiteJours();
+  return elements.filter(x => { x.date = x.date || dateDuNom(x.nom, x.cree); return x.date >= limite; });
+}
+
 function lireATraiter() {
   const etat = lireJson(FICHIER_A_TRAITER, { derniere: null, elements: [] });
-  etat.elements.sort((a, b) => (a.etat === b.etat ? 0 : a.etat === 'nouveau' ? -1 : 1) || String(b.cree).localeCompare(String(a.cree)));
+  etat.elements = gardeRecents(etat.elements); // le filtre se fait ici : 90 jours, jamais le Drive entier
+  etat.elements.sort((a, b) => (a.etat === b.etat ? 0 : a.etat === 'nouveau' ? -1 : 1) || b.date.localeCompare(a.date));
   return etat;
 }
 
@@ -222,11 +240,7 @@ function parcourirFactures(visiteur) {
 }
 
 /** Date d'une facture, comme dans la V1 : la dernière date AAAA-MM-JJ du nom, sinon la date de création. */
-function dateFacture(f, nom) {
-  const m = String(nom).match(/20\d{2}[-_.]\d{2}[-_.]\d{2}/g);
-  if (m) return m[m.length - 1].replace(/[_.]/g, '-');
-  return f.getDateCreated().toISOString().slice(0, 10);
-}
+function dateFacture(f, nom) { return dateDuNom(nom, f.getDateCreated().toISOString()); }
 
 /** Les factures des `jours` derniers jours (90 par défaut), les plus récentes d'abord, filtrées par un mot du nom ou du dossier.
  *  Le tri et le filtre se font ici : le Drive entier ne transite jamais vers l'appli. */

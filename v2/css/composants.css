@@ -156,3 +156,15 @@ html,body{margin:0;background:var(--papier)}
 .fac-case{display:flex;align-items:center;gap:var(--espace-3);min-height:var(--cible-min);font:600 18px/24px var(--font-texte)}
 .fac-case input{width:28px;height:28px;flex:none;accent-color:var(--achat)}
 .fac-qte{display:grid;gap:var(--espace-1)}
+
+.planche-vue{display:grid;gap:12px}
+.apercu-planche{background:#fff;border:1px solid var(--bordure,#d9d4c7)}
+.visionneuse{position:fixed;inset:0;z-index:70;background:#333;display:flex;flex-direction:column}
+.visionneuse__barre{display:flex;gap:8px;align-items:center;padding:max(10px,env(safe-area-inset-top)) 10px 10px;background:#111;color:#fff}
+.visionneuse__titre{flex:1;font-size:18px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.visionneuse__barre .btn{min-height:48px;width:auto;padding:0 14px}
+.visionneuse__corps{flex:1;overflow:auto;-webkit-overflow-scrolling:touch;padding:8px}
+.visionneuse__page{display:block;margin:0 auto 8px;background:#fff;box-shadow:0 2px 8px rgba(0,0,0,.4)}
+.visionneuse__bas{padding:10px 10px max(10px,env(safe-area-inset-bottom));background:#111}
+.ligne button.ligne__txt{height:auto;min-height:0;padding:0;overflow-wrap:anywhere;word-break:break-word;background:none;border:0;text-align:left;color:inherit}
+.ligne button.ligne__ico{padding:0}

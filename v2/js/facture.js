@@ -3,6 +3,7 @@
 // Les règles (lecture Agrifresh, rapprochement, marge, prix de vente suggéré) sont celles de la V1, dans moteur/facture.js.
 import { etat, lire, ecrire } from './donnees.js';
 import { estRelie, facturesDrive, fichierFacture, marquerTraite } from './drive.js';
+import { livrer } from './livrer.js';
 import { ajouterEtiquettes, retirerEtiquettes } from './etiquettes.js';
 import * as IMP from './moteur/import.js';
 import { fournisseursCaisse, fournisseurDe } from './fournisseurs.js';
@@ -228,10 +229,7 @@ function ecranFichiers(message = '', pret = null) {
 let DERNIER = null; // dernier fichier créé, pour le partager
 async function partagerFichier() {
   if (!DERNIER) return;
-  const f = new File([DERNIER.blob], DERNIER.nom, { type: DERNIER.blob.type });
-  try { if (navigator.canShare && navigator.canShare({ files: [f] })) { await navigator.share({ files: [f], title: DERNIER.nom }); return; } } catch (x) { if (x.name === 'AbortError') return; }
-  const a = document.createElement('a'); a.href = URL.createObjectURL(f); a.download = DERNIER.nom; document.body.appendChild(a); a.click(); a.remove();
-  setTimeout(() => URL.revokeObjectURL(a.href), 60000);
+  await livrer(new File([DERNIER.blob], DERNIER.nom, { type: DERNIER.blob.type }));
 }
 const stampFichier = () => { const d = new Date(), p = n => String(n).padStart(2, '0'); return { aammjj: `${String(d.getFullYear()).slice(2)}${p(d.getMonth() + 1)}${p(d.getDate())}`, st: `${String(d.getFullYear()).slice(2)}${p(d.getMonth() + 1)}${p(d.getDate())}-${p(d.getHours())}${p(d.getMinutes())}` }; };
 
