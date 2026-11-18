@@ -20,7 +20,7 @@
  *  - Le secret n'apparaît jamais dans un journal ni dans une réponse.
  */
 
-const VERSION = 3;
+const VERSION = 4;
 const NOM_FACTURES = 'FACTURES ACHAT';
 const NOM_EXPORTS = 'EXPORTS STOREPOS';
 const NOM_APPLI = 'APPLI ETIQUETTES CORBEILLE';
@@ -28,6 +28,9 @@ const NOM_V2 = 'APPLI V2';
 const FICHIER_A_TRAITER = 'a-traiter.json';
 const JOURS_CLE_PRECEDENTE = 7;
 const FENETRE_JOURS = 90;
+const JOURS_TRAITEES = 365; // les factures traitées restent consultables (archives) bien après les 90 jours
+const NOM_CACHE = 'FACTURES_CACHE';
+const ID_VALIDE = /^[A-Za-z0-9_-]{10,80}$/;
 const EXTENSIONS_FACTURE = /\.(pdf|jpe?g|png|heic)$/i;
 const EXTENSIONS_EXPORT = /\.(xlsx|csv|txt)$/i;
 
@@ -49,6 +52,8 @@ function doPost(e) {
       case 'fichier': return repondre({ ok: true, ...lireExport(req.id) });
       case 'factures': return repondre({ ok: true, factures: listerFactures(req.mot, req.max, req.jours) });
       case 'facture': return repondre({ ok: true, ...lireFacture(req.id) });
+      case 'cacheLire': return repondre({ ok: true, cache: lireCacheFactures(req.ids) });
+      case 'cacheEcrire': return repondre(ecrireCacheFacture(req.id, req.fournisseur, req.montant, req.nb));
       case 'lire': return repondre({ ok: true, ...lireDoc(req.doc) });
       case 'ecrire': return repondre(ecrireDoc(req.doc, req.valeur, req.version));
       default: return repondre({ ok: false, erreur: 'action inconnue' });
@@ -127,6 +132,17 @@ function dossierV2() {
   return f;
 }
 
+/** Cache des lectures de factures : APPLI V2/FACTURES_CACHE/{idFacture}.json. Seul endroit, avec APPLI V2, où ce script écrit. */
+function dossierCache() {
+  const id = props().getProperty('ID_CACHE');
+  if (id) return DriveApp.getFolderById(id);
+  const parent = dossierV2();
+  const it = parent.getFoldersByName(NOM_CACHE);
+  const f = it.hasNext() ? it.next() : parent.createFolder(NOM_CACHE);
+  props().setProperty('ID_CACHE', f.getId());
+  return f;
+}
+
 function lireJson(nom, defaut) {
   const it = dossierV2().getFilesByName(nom);
   if (!it.hasNext()) return defaut;
@@ -163,7 +179,12 @@ function chercherFactures() {
     const fichiers = dossierCourant.searchFiles('modifiedDate > "' + seuil + '" and trashed = false');
     while (fichiers.hasNext()) {
       const f = fichiers.next();
-      if (connus.has(f.getId())) continue;
+      if (connus.has(f.getId())) {
+        const k = etat.elements.find(y => y.id === f.getId());
+        const maj = f.getLastUpdated().toISOString();
+        if (k && k.maj !== maj) k.maj = maj; // le PDF a changé : le cache de lecture n'est plus valable (empreinte)
+        continue;
+      }
       const nom = f.getName();
       if (!EXTENSIONS_FACTURE.test(nom)) continue;
       const cree = f.getDateCreated().toISOString();
@@ -187,10 +208,15 @@ function chercherFactures() {
   return { ajoutes };
 }
 
-/** Ne garde que les éléments des 90 derniers jours (date du nom). Sert aussi à vider ce qui a été stocké avant ce filtre. */
+/** À traiter : 90 derniers jours (date du nom). Traitées : un an, pour les archives. Sert aussi à vider ce qui a été stocké avant ce filtre. */
 function gardeRecents(elements) {
   const limite = limiteJours();
-  return elements.filter(x => { x.date = x.date || dateDuNom(x.nom, x.cree); return x.date >= limite; });
+  const limiteTraitees = new Date(Date.now() - JOURS_TRAITEES * 864e5).toISOString();
+  return elements.filter(x => {
+    x.date = x.date || dateDuNom(x.nom, x.cree);
+    if (x.etat === 'traite') return String(x.traiteLe || x.cree) >= limiteTraitees;
+    return x.date >= limite;
+  });
 }
 
 function lireATraiter() {
@@ -259,6 +285,47 @@ function listerFactures(mot, max, jours) {
   });
   out.sort((a, b) => b.date.localeCompare(a.date) || b.nom.localeCompare(a.nom));
   return out.slice(0, Math.min(Number(max) || 150, 300));
+}
+
+// ---------------------------------------------------------------- cache de lecture des factures (écrit dans APPLI V2 seulement)
+
+/** Lectures déjà faites pour ces factures. Valables seulement si l'empreinte (date de modification du PDF) n'a pas changé. */
+function lireCacheFactures(ids) {
+  const voulus = new Set((Array.isArray(ids) ? ids : []).filter(i => ID_VALIDE.test(String(i))).slice(0, 200));
+  if (!voulus.size) return {};
+  const maj = {};
+  lireJson(FICHIER_A_TRAITER, { elements: [] }).elements.forEach(x => { if (voulus.has(x.id)) maj[x.id] = x.maj; });
+  const out = {};
+  const it = dossierCache().getFiles();
+  while (it.hasNext()) {
+    const f = it.next(), nom = f.getName();
+    const id = nom.replace(/\.json$/, '');
+    if (!voulus.has(id) || !(id in maj)) continue;
+    try {
+      const v = JSON.parse(f.getBlob().getDataAsString('UTF-8'));
+      if (v.empreinte === maj[id]) out[id] = { fournisseur: v.fournisseur, montant: v.montant, nb: v.nb };
+    } catch (x) { }
+  }
+  return out;
+}
+
+/** Garde la lecture faite par l'appli (le script ne sait pas lire un PDF sans écrire dans le Drive : c'est l'appli qui lit, comme la V1). */
+function ecrireCacheFacture(id, fournisseur, montant, nb) {
+  if (!ID_VALIDE.test(String(id))) return { ok: false, erreur: 'identifiant invalide' };
+  const el = lireJson(FICHIER_A_TRAITER, { elements: [] }).elements.find(x => x.id === id);
+  if (!el) return { ok: true, ignore: true }; // pas une facture de « À traiter » : rien à garder
+  const m = Number(montant), n = Number(nb);
+  const valeur = {
+    empreinte: el.maj,
+    fournisseur: String(fournisseur || '').slice(0, 60),
+    montant: isFinite(m) ? Math.round(m * 100) / 100 : null,
+    nb: isFinite(n) ? Math.round(n) : null,
+    ecrit: new Date().toISOString()
+  };
+  const dossierC = dossierCache(), texte = JSON.stringify(valeur);
+  const it = dossierC.getFilesByName(id + '.json');
+  if (it.hasNext()) it.next().setContent(texte); else dossierC.createFile(id + '.json', texte, 'application/json');
+  return { ok: true };
 }
 
 /** Contenu d'une facture de FACTURES ACHAT (lecture seule : getBlob). Un identifiant hors de ce dossier est refusé. */

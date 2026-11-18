@@ -31,8 +31,44 @@ function preparerMoteur() {
 
 // Modifications en attente d'être injectées dans StorePOS : prix (MOD), entrées de stock (ENT), fichiers déjà créés (FAITS).
 let MOD = {}, ENT = [], FAITS = [];
-export async function chargerFacture() { FAC = await lire('factureEnCours', null); MOD = await lire('modifs', {}); ENT = await lire('entrees', []); FAITS = await lire('importsFaits', []); }
-const garder = () => ecrire('factureEnCours', FAC);
+// Factures « En cours » (3 au plus, ouvertes depuis À traiter) : ENCOURS ne garde que l'identité ; chaque facture a sa copie « fac:<id> ».
+const MAX_EN_COURS = 3;
+let ENCOURS = {};
+export const idsEnCours = () => Object.entries(ENCOURS).map(([id, v]) => ({ id, ...v }));
+export const estEnCours = id => !!ENCOURS[id];
+let surLecture = null; export function auxLectures(fn) { surLecture = fn; }
+const jourLong = iso => iso ? new Date(iso + 'T12:00').toLocaleDateString('fr-FR', { day: 'numeric', month: 'long' }) : 'cette facture';
+async function sauverEnCours() { await ecrire('facturesEnCours', ENCOURS); }
+/** Note la facture comme « en cours ». Au-delà de 3, la plus ancienne repasse en attente. Renvoie son message pour le toast. */
+async function mettreEnCours(id, dateFacture) {
+  ENCOURS[id] = { ouvert: new Date().toISOString(), date: dateFacture || '' };
+  let message = '';
+  const autres = Object.entries(ENCOURS).filter(([k]) => k !== id).sort((a, b) => a[1].ouvert.localeCompare(b[1].ouvert));
+  while (Object.keys(ENCOURS).length > MAX_EN_COURS && autres.length) {
+    const [vieux, v] = autres.shift(); delete ENCOURS[vieux]; await ecrire('fac:' + vieux, null);
+    message = `Celle du ${jourLong(v.date)} a été remise en attente`;
+  }
+  await sauverEnCours(); return message;
+}
+/** Sort une facture de « En cours » (validée, marquée traitée…). Renvoie ce qu'il faut pour la remettre (Annuler). */
+export async function retirerEnCours(id) { const v = ENCOURS[id]; if (!v) return null; delete ENCOURS[id]; await sauverEnCours(); return v; }
+export async function restaurerEnCours(id, v) { if (v) { ENCOURS[id] = v; await sauverEnCours(); } }
+/** Rouvre une facture « en cours » sans relire le PDF. */
+export async function reprendreEnCours(id, nav) {
+  const f = await lire('fac:' + id, null); if (!f) return false;
+  FAC = f; await garder(); preparerMoteur(); nav.afficher(ecranFacture(), 'facture'); return true;
+}
+/** Fournisseur, nombre de produits et somme des lignes lues dans le texte d'une facture (mêmes règles de lecture que « Travailler une facture »). */
+export function statsDeTexte(texte) {
+  preparerMoteur();
+  const r = F.parseInvoice(texte, null);
+  if (!r.lines.length) return null;
+  const montant = r.lines.reduce((t, x) => t + (typeof x.mt === 'number' && isFinite(x.mt) ? x.mt : 0), 0);
+  return { fournisseur: r.sup || '', montant: Math.round(montant * 100) / 100, nb: r.lines.length };
+}
+
+export async function chargerFacture() { ENCOURS = await lire('facturesEnCours', {}); FAC = await lire('factureEnCours', null); MOD = await lire('modifs', {}); ENT = await lire('entrees', []); FAITS = await lire('importsFaits', []); }
+const garder = async () => { await ecrire('factureEnCours', FAC); if (FAC && FAC.driveId && ENCOURS[FAC.driveId]) await ecrire('fac:' + FAC.driveId, FAC); };
 const garderTout = async () => { await ecrire('modifs', MOD); await ecrire('entrees', ENT); await ecrire('importsFaits', FAITS); };
 export const enAttente = () => Object.keys(MOD).length + ENT.length;
 const aujourdhui = () => new Date().toISOString().slice(0, 10);
@@ -93,7 +129,7 @@ export function ecranFactureAccueil({ relie, enCours, message = '' }) {
 export function ecranListeFactures({ titre, factures, message = '' }) {
   const L = fournisseursCaisse();
   const jour = d => d ? d.split('-').reverse().slice(0, 2).join('/') : '';
-  const ligne = (f, four) => `<button class="ligne" data-action="fac-ouvrir" data-id="${esc(f.id)}" style="border:0;font:inherit;text-align:left;width:100%"><div class="ligne__ico">${icone('facture')}</div><div class="ligne__txt"><div class="ligne__titre">${esc(jour(f.date))} · ${esc(four || f.nom)}</div><div class="ligne__detail">${esc(f.nom.replace(/^\d{4}-\d{2}-\d{2}_/, '').slice(0, 56))}</div></div></button>`;
+  const ligne = (f, four) => `<button class="ligne" data-action="fac-ouvrir" data-id="${esc(f.id)}" data-date="${esc(f.date || '')}" style="border:0;font:inherit;text-align:left;width:100%"><div class="ligne__ico">${icone('facture')}</div><div class="ligne__txt"><div class="ligne__titre">${esc(jour(f.date))} · ${esc(four || f.nom)}</div><div class="ligne__detail">${esc(f.nom.replace(/^\d{4}-\d{2}-\d{2}_/, '').slice(0, 56))}</div></div></button>`;
   // groupes par fournisseur (déjà triés du plus récent au plus ancien) ; ceux à une seule facture vont ensemble à la suite
   const groupes = new Map();
   for (const f of factures) { const four = fournisseurDe(f, L) || 'Autre'; if (!groupes.has(four)) groupes.set(four, []); groupes.get(four).push(f); }
@@ -256,7 +292,7 @@ export async function actionFacture(a, b, nav) {
   }
   if (a === 'fac-ouvrir') {
     nav.afficher(ecranLecture('Je télécharge la facture…'), 'facture-lecture');
-    try { const f = await fichierFacture(b.dataset.id); await lireEtMontrer(f, nav, 'drive', b.dataset.id); }
+    try { const f = await fichierFacture(b.dataset.id); await lireEtMontrer(f, nav, 'drive', b.dataset.id, b.dataset.date || ''); }
     catch (x) { accueil(`Lecture impossible : ${x.message}.`); }
     return true;
   }
@@ -288,11 +324,12 @@ export async function actionFacture(a, b, nav) {
     }
     const ajoutees = await ajouterEtiquettes([...new Set(etqAjoutees)]); r.etq = ajoutees.length;
     FAC.valide = new Date().toISOString(); await garder(); await garderTout();
+    const metaEc = FAC.driveId ? await retirerEnCours(FAC.driveId) : null;
     if (FAC.driveId) { try { await marquerTraite(FAC.driveId, true, ''); nav.sync && nav.sync(); } catch (x) { } }
     nav.afficher(ecranValidee(r), 'facture-validee');
     nav.toast('Facture validée', async () => {
       const v = JSON.parse(avant); MOD = v.MOD; ENT = v.ENT; FAC.valide = null; await retirerEtiquettes(ajoutees); await garder(); await garderTout();
-      if (FAC.driveId) { try { await marquerTraite(FAC.driveId, false); nav.sync && nav.sync(); } catch (x) { } }
+      if (FAC.driveId) { await restaurerEnCours(FAC.driveId, metaEc); try { await marquerTraite(FAC.driveId, false); nav.sync && nav.sync(); } catch (x) { } }
       rendre();
     });
     return true;
@@ -342,7 +379,7 @@ export async function actionFacture(a, b, nav) {
   return false;
 }
 
-async function lireEtMontrer(file, nav, source, driveId = '') {
+async function lireEtMontrer(file, nav, source, driveId = '', dateFacture = '') {
   preparerMoteur();
   nav.afficher(ecranLecture('Lecture du texte de la facture…'), 'facture-lecture');
   const maj = p => { const z = document.querySelector('[data-pct]'); if (z) z.textContent = p + ' %'; };
@@ -351,8 +388,12 @@ async function lireEtMontrer(file, nav, source, driveId = '') {
   if (!r.lines.length) throw new Error('aucune ligne reconnue (essaie le PDF, ou une photo plus nette)');
   FAC = { sup: r.sup, date: r.date, nom: file.name, source, driveId, lignes: r.lines, lue: new Date().toISOString() };
   FAC.lignes.forEach(defauts);
-  filtre = 'toutes'; await garder();
+  filtre = 'toutes';
+  let remise = '';
+  if (driveId) { remise = await mettreEnCours(driveId, dateFacture); if (surLecture) surLecture(driveId, { fournisseur: r.sup || '', montant: Math.round(r.lines.reduce((t, x) => t + (typeof x.mt === 'number' && isFinite(x.mt) ? x.mt : 0), 0) * 100) / 100, nb: r.lines.length }); }
+  await garder();
   nav.afficher(ecranFacture(), 'facture');
+  if (remise) nav.toast(remise);
 }
 
 /** Champs de saisie et photo : branchés une fois sur l'appli. */
