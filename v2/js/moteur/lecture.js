@@ -1,7 +1,7 @@
 // Lecture d'une photo ou d'un PDF de facture : code repris de la V1 (OCR Tesseract, PDF.js).
 // Les bibliothèques et la langue française sont celles de la V1 (dossiers ../lib et ../tessdata), lues sans y toucher.
 let TESS=null;
-let PDFJS=null;async function pdfLib(){if(PDFJS)return PDFJS;try{PDFJS=await import(new URL('../lib/pdf.min.mjs',location.href).href)}catch(e){throw new Error('lecteur PDF pas encore installé : ouvrez l\'appli une fois avec internet')}PDFJS.GlobalWorkerOptions.workerSrc=new URL('../lib/pdf.worker.min.mjs',location.href).href;return PDFJS}
+let PDFJS=null;export async function pdfLib(){if(PDFJS)return PDFJS;try{PDFJS=await import(new URL('../lib/pdf.min.mjs',location.href).href)}catch(e){throw new Error('lecteur PDF pas encore installé : ouvrez l\'appli une fois avec internet')}PDFJS.GlobalWorkerOptions.workerSrc=new URL('../lib/pdf.worker.min.mjs',location.href).href;return PDFJS}
 export async function ocrImage(file,onp){if(!window.Tesseract){await new Promise((res,rej)=>{const s=document.createElement('script');s.src='https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js';s.onload=res;s.onerror=()=>rej(new Error('Le moteur de lecture n\'est pas encore installé sur ce téléphone : ouvrez l\'appli une fois avec internet.'));document.head.appendChild(s)})}
  if(!TESS)TESS=await Tesseract.createWorker('fra',1,{langPath:new URL('../tessdata/',location.href).href,gzip:true,logger:m=>{if(m.status==='recognizing text')onp(Math.round(m.progress*100))}});
  await TESS.setParameters({tessedit_pageseg_mode:'6',preserve_interword_spaces:'1'});const img=await prepImage(file);const r=await TESS.recognize(img);return r.data.text}

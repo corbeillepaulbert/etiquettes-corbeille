@@ -8,8 +8,9 @@ import { lire, ecrire } from './donnees.js';
 import { chargerEtiquettes, actionEtiquettes } from './etiquettes.js';
 import { filtrer } from './fournisseurs.js';
 import { chercher } from './recherche.js';
+import { ouvrirVisionneuse } from './visionneuse.js';
 import { chargerFacture, actionFacture, brancherFacture } from './facture.js';
-import { chargerConfig, estRelie, relier, delier, aTraiterEnCache, majATraiter, rafraichirMaintenant, marquerTraite, prendreExports, synchroniserListe } from './drive.js';
+import { chargerConfig, estRelie, relier, delier, aTraiterEnCache, majATraiter, rafraichirMaintenant, marquerTraite, prendreExports, synchroniserListe, fichierFacture } from './drive.js';
 
 const app = document.getElementById('app');
 const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
@@ -209,8 +210,8 @@ function aTraiter(message = '') {
   }
   const vue = vueAT(), el = vue.gardes;
   const nouv = el.filter(x => x.etat === 'nouveau'), faits = el.filter(x => x.etat === 'traite').slice(0, 10);
-  const ligne = x => `<div class="ligne"><a class="ligne__ico" href="${esc(x.url)}" target="_blank" rel="noopener" aria-label="Ouvrir dans le Drive" style="text-decoration:none">${icone('facture')}</a>
-    <a class="ligne__txt" href="${esc(x.url)}" target="_blank" rel="noopener" style="text-decoration:none;color:inherit"><div class="ligne__titre">${esc(x.nom)}</div><div class="ligne__detail">${esc(x.dossier || 'FACTURES ACHAT')} · ${new Date(x.cree).toLocaleDateString('fr-FR', { day: 'numeric', month: 'short' })}${x.etat === 'traite' && x.traitePar ? ` · traitée par ${esc(x.traitePar)}` : ''}</div></a>
+  const ligne = x => `<div class="ligne"><button class="ligne__ico" data-action="at-voir" data-id="${esc(x.id)}" aria-label="Voir la facture" style="border:0;font:inherit">${icone('facture')}</button>
+    <button class="ligne__txt" data-action="at-voir" data-id="${esc(x.id)}" style="font:inherit"><div class="ligne__titre">${esc(x.nom)}</div><div class="ligne__detail">${esc(x.dossier || 'FACTURES ACHAT')} · ${new Date((x.date || String(x.cree).slice(0, 10)) + 'T12:00').toLocaleDateString('fr-FR', { day: 'numeric', month: 'short' })}${x.etat === 'traite' && x.traitePar ? ` · traitée par ${esc(x.traitePar)}` : ''}</div></button>
     ${x.etat === 'nouveau' ? `<button class="btn btn--secondaire" data-action="traite" data-id="${esc(x.id)}">Traitée</button>` : `<span class="pastille pastille--ok">Traitée</span>`}</div>`;
   afficher(`<div class="scr cb">${barreMode('magasin', 'À traiter', true)}
   <div class="scr__corps">
@@ -254,6 +255,16 @@ app.addEventListener('click', async e => {
   if (await actionFacture(a, b, nav)) return;
   if (a === 'accueil') return accueil();
   if (a === 'mode') { if (b.dataset.mode === 'inventaire') return pasEncore('inventaire'); return ouvrirMode(b.dataset.mode); }
+  if (a === 'at-voir') {
+    const id = b.dataset.id, x = (cacheAT.elements || []).find(y => y.id === id); if (!x) return;
+    b.disabled = true;
+    try {
+      const f = await fichierFacture(id);
+      b.disabled = false;
+      await ouvrirVisionneuse(f, x.nom, () => actionFacture('fac-ouvrir', { dataset: { id } }, nav));
+    } catch (er) { b.disabled = false; aTraiter(`Aperçu impossible : ${er.message}.`); }
+    return;
+  }
   if (a === 'ouvrir-fiche') { const p = trouver(b.dataset.e); return p && fiche(p); }
   if (a === 'scanner') return scanner(mode);
   if (a === 'scanner-achat') return scanner('achat');
