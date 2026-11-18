@@ -21,6 +21,13 @@ async function sauver() {
   await ecrire('etiqSelection', E.codes); await ecrire('etiqNoms', E.noms);
   await ecrire('etiqForce', E.force); await ecrire('etiqHistorique', E.historique);
 }
+/** Ajoute des produits épicerie à la planche en cours (depuis une facture validée). Retourne ceux qui ont été ajoutés. */
+export async function ajouterEtiquettes(codes) {
+  const nouveaux = codes.filter(e => !E.codes.includes(e) && etat.produits[e] && !estFL(etat.produits[e]) && imprimable(e));
+  if (nouveaux.length) { E.codes.push(...nouveaux); await sauver(); }
+  return nouveaux;
+}
+export async function retirerEtiquettes(codes) { E.codes = E.codes.filter(e => !codes.includes(e)); await sauver(); }
 function ctx() { configurer({ noms: E.noms, force: E.force, seuil: etat.reglages.seuilTop || 365, jours: joursVentes() }); }
 const liste = () => E.codes.map(e => etat.produits[e]).filter(Boolean);
 

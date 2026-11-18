@@ -59,7 +59,7 @@ export async function prendreExports({ forcer = false } = {}) {
   for (const t of ['base', 'ventes']) {
     const f = choisis[t]; if (!f) continue;
     const deja = etat.meta[t];
-    if (!forcer && deja && deja.driveId === f.id && deja.driveMaj === f.maj && deja.v === 2) continue;
+    if (!forcer && deja && deja.driveId === f.id && deja.driveMaj === f.maj && deja.v === 3) continue;
     const c = await appel('fichier', { id: f.id }); if (!c.ok) throw new Error('fichier refusé : ' + f.nom);
     const octets = Uint8Array.from(atob(c.base64), ch => ch.charCodeAt(0));
     const fichier = new File([octets], c.nom);
@@ -102,8 +102,8 @@ export async function synchroniserListe() {
 
 // ---------- factures du Drive (lecture seule) ----------
 /** Les factures les plus récentes de FACTURES ACHAT, éventuellement celles d'un fournisseur. */
-export async function facturesDrive(mot = '', max = 40) {
-  const r = await appel('factures', { mot, max }); if (!r.ok) throw new Error(r.erreur || 'refusé (le script du Drive est-il à jour ?)');
+export async function facturesDrive(mot = '', max = 150, jours = 90) {
+  const r = await appel('factures', { mot, max, jours }); if (!r.ok) throw new Error(r.erreur || 'refusé (le script du Drive est-il à jour ?)');
   return r.factures;
 }
 /** Le fichier d'une facture, lu sans rien modifier dans le Drive. */

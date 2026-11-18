@@ -152,3 +152,7 @@ html,body{margin:0;background:var(--papier)}
 .fac-champ{min-height:var(--cible-min);font-size:22px;padding:0 var(--espace-3)}
 .fac-btn{min-height:var(--cible-min);margin-top:var(--espace-1)}
 .duo>:last-child:nth-child(odd){grid-column:1/-1}
+.fac-actions{display:grid;gap:var(--espace-2);border-top:2px solid var(--trait);padding-top:var(--espace-3)}
+.fac-case{display:flex;align-items:center;gap:var(--espace-3);min-height:var(--cible-min);font:600 18px/24px var(--font-texte)}
+.fac-case input{width:28px;height:28px;flex:none;accent-color:var(--achat)}
+.fac-qte{display:grid;gap:var(--espace-1)}
