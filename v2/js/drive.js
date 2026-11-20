@@ -4,10 +4,16 @@ import { lire, ecrire, etat, importerFichier } from './donnees.js';
 
 let config = null;
 export async function chargerConfig() { config = await lire('drive', null); return config; }
-export const estRelie = () => !!(config && config.url && config.cle);
+export const estInvite = () => !!(config && config.invite && config.jeton);
+export const finInvite = () => (estInvite() ? config.fin : 0);
+export const nomInvite = () => (estInvite() ? config.nom || '' : '');
+export const estRelie = () => !!(config && config.url && (config.cle || (config.jeton && config.fin > Date.now())));
+export const estAdmin = () => !!(config && config.url && config.cle);
+const URL_EXEC = /^https:\/\/script\.google\.com\/macros\/s\/[\w-]+\/exec$/;
+export const urlValide = u => URL_EXEC.test(String(u || ''));
 export async function relier(url, cle) {
   const essai = { url: String(url || '').trim(), cle: String(cle || '').trim() };
-  if (!/^https:\/\/script\.google\.com\/macros\/s\/[\w-]+\/exec$/.test(essai.url)) throw new Error("l'adresse doit être celle de l'application Web, qui finit par /exec");
+  if (!urlValide(essai.url)) throw new Error("l'adresse doit être celle de l'application Web, qui finit par /exec");
   if (essai.cle.length < 24) throw new Error('la clé fait au moins 24 caractères');
   const r = await appel('ping', {}, essai);
   if (!r.ok) throw new Error('le Drive refuse cette clé');
@@ -16,6 +22,8 @@ export async function relier(url, cle) {
 }
 export async function delier() { config = null; await ecrire('drive', null); }
 
+let quandInviteFini = null;
+export function siInviteFini(fn) { quandInviteFini = fn; }
 const ACTIONS_AT = new Set(['aTraiter', 'rafraichir', 'traiter', 'facture', 'cacheLire', 'cacheEcrire', 'ping']);
 export const VERSION_SCRIPT_MIN = 4; // version de Code.gs attendue par cette appli
 export async function appel(action, donnees = {}, cfg = config) {
@@ -27,10 +35,11 @@ export async function appel(action, donnees = {}, cfg = config) {
     const r = await fetch(cfg.url, {
       method: 'POST', redirect: 'follow', signal: ctl.signal,
       headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-      body: JSON.stringify({ ...donnees, action, cle: cfg.cle })
+      body: JSON.stringify({ ...donnees, action, ...(cfg.cle ? { cle: cfg.cle } : cfg.jeton ? { jeton: cfg.jeton } : {}) })
     });
     if (!r.ok) throw new Error('le Drive ne répond pas (' + r.status + ')');
     const rep = await r.json();
+    if (cfg.jeton && rep && rep.ok === false && rep.invite === 'fini' && quandInviteFini) quandInviteFini();
     if (log) console.log(`[V2/ATraiter] réponse « ${action} » : ok=${rep && rep.ok}${rep && rep.erreur ? ' erreur=' + rep.erreur : ''}`);
     return rep;
   } catch (x) {
@@ -76,6 +85,29 @@ export async function lireCache(ids) {
 export async function ecrireCache(id, { fournisseur, montant, nb }) {
   const r = await appel('cacheEcrire', { id, fournisseur, montant, nb }); return !!(r && r.ok);
 }
+
+// ---------- mode invité ----------
+// Le lien d'invitation porte l'adresse /exec dans le fragment (#invite=…), jamais la clé : le fragment ne part pas sur le réseau.
+const b64 = t => btoa(t).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+const deb64 = t => atob(String(t).replace(/-/g, '+').replace(/_/g, '/'));
+export function lienInvitation() { return estAdmin() ? `${location.origin}${location.pathname}#invite=${b64(config.url)}` : ''; }
+export function urlDuLien(hash = location.hash) {
+  const m = /[#&]invite=([\w-]+)/.exec(hash || ''); if (!m) return '';
+  try { const u = deb64(m[1]); return urlValide(u) ? u : ''; } catch (x) { return ''; }
+}
+export async function demanderCode(url, nom) {
+  const r = await appel('inviteDemande', { nom }, { url });
+  if (!r.ok) throw new Error(r.erreur || 'demande refusée');
+  return r; // { demande, minutes }
+}
+export async function validerCode(url, demande, code) {
+  const r = await appel('inviteValider', { demande, code }, { url });
+  if (!r.ok) throw new Error(r.erreur || 'code refusé');
+  config = { url, jeton: r.jeton, fin: r.fin, nom: r.nom, invite: true };
+  await ecrire('drive', config);
+  return config;
+}
+export async function arreterInvites() { const r = await appel('inviteArreter'); if (!r.ok) throw new Error('refusé'); return r.arretees || 0; }
 
 // ---------- exports StorePOS ----------
 const typeProbable = nom => /vente|plu/i.test(nom) ? 'ventes' : 'base';

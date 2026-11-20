@@ -31,6 +31,14 @@ Appli de La Corbeille Paul Bert. Deux versions cohabitent sur le même site GitH
 - **Rotation** : nouvelle valeur dans `CLE_APPLI`, l'ancienne dans `CLE_PRECEDENTE`, acceptée 7 jours au plus, puis supprimée. Les appareils sont mis à jour dans Réglages pendant ce délai.
 - L'URL `/exec` de l'application Web n'est pas non plus dans le dépôt : elle se saisit dans Réglages.
 
+### Mode invité (seule exception à la clé, justifiée)
+- Besoin : prêter l'appli quelques heures à une personne sans lui donner la clé du magasin.
+- Le responsable envoie un lien `v2/#invite=<adresse /exec en base64>` (Réglages → Mode invité). L'adresse est dans le fragment : elle ne part jamais sur le réseau. **La clé n'est jamais dans le lien.**
+- Deux actions seulement acceptées sans clé : `inviteDemande` (envoie un code à 6 chiffres par `MailApp` à l'adresse du compte du magasin, ou à la propriété `MAIL_ADMIN` ; 5 demandes par heure au plus ; le code n'est jamais renvoyé à l'appli) et `inviteValider` (15 minutes, 5 essais ; renvoie un jeton de session).
+- Le jeton vaut 6 h. Il ouvre uniquement `ping`, `exports`, `fichier`, `lire`/`ecrire` du document `liste-achat`. Jamais les factures, À traiter, le cache ni les réglages.
+- Code et jetons gardés en empreinte SHA-256 dans les propriétés du script (aucune écriture Drive). « Arrêter les sessions invitées » (avec la clé) les supprime toutes.
+- À la fin des 6 h, si le serveur refuse le jeton, ou sur « Quitter le mode invité » : l'appli efface toute la base `corbeille-v2` du téléphone invité.
+
 ### Dossier FACTURES ACHAT : lecture seule absolue
 - Le script **lit** FACTURES ACHAT et ses sous-dossiers : il **ne déplace rien, ne renomme rien, ne supprime rien, n'écrit rien** dans ce dossier.
 - Appels autorisés sur ce dossier et son contenu : `getFolderById`, `getFoldersByName`, `getFolders`, `getFiles`, `searchFiles`, `getName`, `getId`, `getDateCreated`, `getLastUpdated`, `getMimeType`, `getSize`, `getBlob`.
@@ -50,7 +58,7 @@ Appli de La Corbeille Paul Bert. Deux versions cohabitent sur le même site GitH
 - Source : `apps-script/Code.gs` (sans aucun secret ni identifiant de dossier). Installation décrite en tête du fichier.
 - Écritures du script : uniquement `createFolder` (APPLI V2 et son sous-dossier FACTURES_CACHE, une fois chacun), `createFile` et `setContent` sur les fichiers JSON de APPLI V2 (dont `FACTURES_CACHE/{idFacture}.json`).
 - Cache de lecture des factures : le script ne sait pas lire un PDF sans écrire dans le Drive (OCR de l'API Drive avancée = écriture interdite). C'est donc l'appli qui lit la facture (règles V1) et envoie fournisseur / montant / nombre de produits (`cacheEcrire`) ; le script les garde avec, pour empreinte, la date de modification du PDF, et ne les rend (`cacheLire`) que si elle n'a pas changé.
-- Version du script : `ping` renvoie `version`. L'appli exige la version 4 ou plus (Réglages → « Tester la connexion Apps Script »).
+- Version du script : `ping` renvoie `version`. L'appli exige la version 4 ou plus (version 5 pour le mode invité, qui demande d'exécuter `installer()` une fois pour autoriser l'envoi d'e-mails) (Réglages → « Tester la connexion Apps Script »).
 
 ## Code de la V2
 
