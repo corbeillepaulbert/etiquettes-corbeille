@@ -215,3 +215,18 @@ html,body{margin:0;background:var(--papier)}
 .caisse-res{display:grid;gap:10px}
 .caisse-nom{font:800 30px/1.15 var(--font-titre)}
 .caisse-prix{font:800 64px/1 var(--font-titre);color:var(--corbeille)}
+/* exports attendus */
+.exp-carte{display:grid;gap:12px;box-shadow:inset 0 0 0 2px var(--abricot)}
+.exp-liste{display:grid;gap:8px}
+.exp-ligne{display:flex;justify-content:space-between;align-items:center;gap:8px;min-height:48px;border-top:1px solid var(--trait);padding-top:8px}
+.exp-ok{display:flex;align-items:center;gap:4px;font:700 18px var(--font-texte);color:var(--succes)}
+.exp-ko{font:700 18px var(--font-texte);color:var(--erreur)}
+/* conseil d'achat */
+.cons-ligne{display:flex;gap:10px;align-items:center;background:var(--carte);border-radius:var(--rayon-m);box-shadow:var(--ombre-carte);padding:10px 12px}
+.cons-ligne--ok{box-shadow:inset 0 0 0 2px var(--succes-vif)}
+.cons-txt{flex:1;min-width:0;border:0;background:none;font:inherit;text-align:left;color:inherit;padding:0}
+.cons-dluo{font:600 16px/22px var(--font-texte);color:var(--alerte);margin-top:2px}
+.cons-qte{display:flex;flex-direction:column;align-items:center;gap:6px;flex:none}
+.cons-qte b{font:800 30px/1 var(--font-titre);color:var(--achat)}
+.cons-ajout{min-height:48px;width:56px;padding:0;font:800 28px/1 var(--font-titre)}
+.cons-pas{display:grid;gap:2px;padding:8px 0;border-top:1px solid var(--trait)}

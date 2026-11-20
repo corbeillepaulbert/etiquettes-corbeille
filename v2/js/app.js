@@ -10,6 +10,7 @@ import { filtrer, fournisseursCaisse } from './fournisseurs.js';
 import { chercher } from './recherche.js';
 import { ouvrirVisionneuse } from './visionneuse.js';
 import { chargerAffiches, actionAffiches } from './affiches.js';
+import { chargerConseil, actionConseil } from './conseil.js';
 import { chargerInconnus, actionInconnus, noterInconnu, synchroniserInconnus, aIdentifier, siInconnuChange } from './inconnus.js';
 import { chargerCaisse, actionCaisse, modeCaisse, ecranCaisse, blocCaisse, interditEnCaisse } from './caisse.js';
 import { chargerFacture, actionFacture, brancherFacture, estEnCours, reprendreEnCours, retirerEnCours, restaurerEnCours } from './facture.js';
@@ -37,6 +38,8 @@ function vueAT() {
 const nouveaux = () => vueAT().gardes.filter(x => x.etat === 'nouveau').length;
 
 const meta = () => ({ jours: joursVentes() });
+const jj = d => d ? d.split('-').reverse().join('/') : '';
+const nomImport = r => r.type === 'periode' ? `Ventes du ${jj(r.du)} au ${jj(r.au)}` : r.type === 'ventes' ? 'Ventes' : 'Produits';
 const dateDuJour = () => new Date().toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long' }).replace(/^./, c => c.toUpperCase());
 
 function afficher(html, nom = '') { ecranCourant = nom; document.querySelector('.toast-zone')?.remove(); app.innerHTML = html; app.scrollTop = 0; }
@@ -85,6 +88,7 @@ async function ouvrirMode(m) {
     <div id="rech-repos">
     ${vide ? `<div class="carte"><div class="titre-2">Aucun produit chargé.</div><div class="note" style="margin-top:8px">Touche « Mettre à jour les ventes » sur l'accueil.</div></div>` : ''}
     ${p ? `<button class="ligne" data-action="ouvrir-fiche" data-e="${esc(p.e)}" style="border:0;font:inherit;text-align:left;width:100%"><div class="ligne__ico">${icone(m)}</div><div class="ligne__txt"><div class="ligne__titre">${esc(joli(p.lib))}</div><div class="ligne__detail">Dernière fiche · ${euros(p.prix)}</div></div></button>` : ''}
+    ${m === 'achat' ? `<button class="ligne" data-action="conseil" style="border:0;font:inherit;text-align:left;width:100%"><div class="ligne__ico">${icone('courbe')}</div><div class="ligne__txt"><div class="ligne__titre">Conseil d'achat</div><div class="ligne__detail">Ce qu'il faut prendre chez chaque fournisseur</div></div></button>` : ''}
     ${m === 'achat' ? `<button class="ligne" data-action="liste" style="border:0;font:inherit;text-align:left;width:100%"><div class="ligne__ico">${icone('achat')}</div><div class="ligne__txt"><div class="ligne__titre">Ma liste d'achat</div><div class="ligne__detail">${etat.liste.length ? etat.liste.length + ' produit(s)' : 'Vide pour l\'instant'}</div></div></button>` : ''}
     </div>
   </div>
@@ -174,7 +178,7 @@ function donnees(message = '') {
     const faits = [];
     for (const f of files) {
       zone.innerHTML = `<div class="note">Lecture de ${esc(f.name)}…</div>`;
-      try { const r = await importerFichier(f); faits.push(`${r.type === 'ventes' ? 'Ventes' : 'Produits'} : ${r.lignes.toLocaleString('fr-FR')} lignes`); }
+      try { const r = await importerFichier(f); faits.push(`${nomImport(r)} : ${r.lignes.toLocaleString('fr-FR')} lignes`); }
       catch (x) { zone.innerHTML = `<div class="bandeau bandeau--erreur">${icone('alerte', 'cb-ico cb-ico--24')}<span>${esc(f.name)} : ${esc(x.message)}</span></div>`; return; }
     }
     donnees();
@@ -273,6 +277,7 @@ app.addEventListener('click', async e => {
   if (interditEnCaisse(a)) { console.warn('[V2/Caisse] action refusée :', a); return accueil(); }
   if (await actionCaisse(a, b, nav)) return;
   if (await actionInconnus(a, b, nav)) return;
+  if (await actionConseil(a, b, nav)) return;
   if (await actionAffiches(a, b, nav)) return;
   if (await actionFacture(a, b, nav)) return;
   if (estInvite() && INTERDIT_INVITE.test(a)) { console.warn('[V2/Invité] action refusée :', a); return accueil(); }
@@ -385,7 +390,7 @@ app.addEventListener('click', async e => {
   if (a === 'fin-reglages') { nomAppareil = (app.querySelector('#nom-app')?.value || '').trim().slice(0, 40); await ecrire('nomAppareil', nomAppareil); return accueil(); }
   if (a === 'exports-drive') {
     b.disabled = true; b.innerHTML = 'Lecture des exports du Drive…';
-    try { const f = await prendreExports({ forcer: true }); donnees(); toast(f.map(r => `${r.type === 'ventes' ? 'Ventes' : 'Produits'} : ${r.lignes.toLocaleString('fr-FR')} lignes`).join(' · ') || 'Aucun export trouvé'); }
+    try { const f = await prendreExports({ forcer: true }); donnees(); toast(f.map(r => `${nomImport(r)} : ${r.lignes.toLocaleString('fr-FR')} lignes`).join(' · ') || 'Aucun export trouvé'); }
     catch (x) { donnees(`Impossible de lire les exports : ${x.message}.`); }
     return;
   }
@@ -428,7 +433,7 @@ ecouterDouchette(code => { if (!document.querySelector('.scan-plein')) resultat(
 
 // ---------- mode invité : fin de session ----------
 // L'invité ne fait que des étiquettes : tout le reste est refusé (et le serveur ne lui donne que les produits).
-const INTERDIT_INVITE = /^(factures|fac-.*|a-traiter|at-.*|rafraichir|traite|reglages|fin-reglages|relier|delier|tester-script|donnees|exports-drive|reprendre-v1|mode|scanner|scanner-achat|liste|ouvrir-fiche|vider|retirer|affiches|af-.*|inconnus|inc-.*|caisse-.*|invite-lien|invite-arreter)$/;
+const INTERDIT_INVITE = /^(factures|fac-.*|a-traiter|at-.*|rafraichir|traite|reglages|fin-reglages|relier|delier|tester-script|donnees|exports-drive|reprendre-v1|mode|scanner|scanner-achat|liste|ouvrir-fiche|vider|retirer|affiches|af-.*|inconnus|inc-.*|caisse-.*|conseil|cons-.*|besoins-.*|invite-lien|invite-arreter)$/;
 let minuteurInvite = null;
 function surveillerInvite() {
   clearInterval(minuteurInvite);
@@ -462,7 +467,7 @@ async function syncFond(force = false) {
     if (!estInvite()) { try { cacheAT = await majATraiter(); erreurAT = ''; } catch (x) { erreurAT = MSG_ERREUR_DRIVE; console.error('[V2/ATraiter] échec :', x.message); } }
     try {
       const faits = await prendreExports();
-      if (faits.length) toast(`Mis à jour depuis le Drive : ${faits.map(r => r.type === 'ventes' ? 'ventes' : 'produits').join(' et ')}`);
+      if (faits.length) toast(`Mis à jour depuis le Drive : ${faits.map(r => nomImport(r).toLowerCase()).join(' et ')}`);
     } catch (x) { }
     try { if (await lire('listeAEnvoyer', false) || force || ecranCourant === 'liste') await synchroniserListe(); } catch (x) { }
     if (!estInvite()) { try { if (await lire('inconnusAEnvoyer', false) || force) await synchroniserInconnus(); } catch (x) { } }
@@ -490,6 +495,7 @@ document.addEventListener('visibilitychange', () => { if (document.visibilitySta
   await chargerEtiquettes();
   await chargerFacture();
   await chargerAffiches();
+  await chargerConseil();
   await chargerInconnus();
   await chargerCaisse();
   await chargerLectures();
