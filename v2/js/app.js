@@ -50,13 +50,13 @@ function resumeDonnees() {
 // ---------- écrans ----------
 let urlInvitation = ''; // adresse /exec venue d'un lien d'invitation, en attente du code
 let demandeInvite = null; // { demande, minutes, nom }
-function accueil() {
+async function accueil() {
   courant = null;
-  if (estInvite()) { afficher(ecranAccueilInvite({ fin: finInvite(), nom: nomInvite(), donnees: resumeDonnees(), liste: etat.liste.length }), 'accueil'); return; }
+  if (estInvite()) { afficher(ecranAccueilInvite({ fin: finInvite(), nom: nomInvite(), donnees: resumeDonnees(), planche: (await lire('etiqSelection', [])).length }), 'accueil'); return; }
   if (!estRelie() && urlInvitation) {
     afficher(`<div class="scr cb"><div class="scr__corps"><h1 class="titre-1">Bonjour</h1>
       <div class="note">Tu as reçu un lien d'invitation.</div>
-      <button class="tuile tuile--magasin" data-action="invite-ouvrir">${icone('magasin')}<div><b>Mode invité</b><span>Accès de 6 heures, avec un code du responsable</span></div></button>
+      <button class="tuile tuile--magasin" data-action="invite-ouvrir">${icone('magasin')}<div><b>Mode invité</b><span>Étiquettes pendant 6 heures, avec un code du responsable</span></div></button>
       </div></div>`, 'accueil');
     return;
   }
@@ -417,7 +417,8 @@ brancherFacture(app, nav);
 ecouterDouchette(code => { if (!document.querySelector('.scan-plein')) resultat(code); });
 
 // ---------- mode invité : fin de session ----------
-const INTERDIT_INVITE = /^(factures|fac-.*|a-traiter|at-.*|rafraichir|traite|reglages|fin-reglages|relier|delier|tester-script|donnees|exports-drive|reprendre-v1|etiquettes|etiq-.*|invite-lien|invite-arreter)$/;
+// L'invité ne fait que des étiquettes : tout le reste est refusé (et le serveur ne lui donne que les produits).
+const INTERDIT_INVITE = /^(factures|fac-.*|a-traiter|at-.*|rafraichir|traite|reglages|fin-reglages|relier|delier|tester-script|donnees|exports-drive|reprendre-v1|mode|scanner|scanner-achat|liste|ouvrir-fiche|vider|retirer|invite-lien|invite-arreter)$/;
 let minuteurInvite = null;
 function surveillerInvite() {
   clearInterval(minuteurInvite);

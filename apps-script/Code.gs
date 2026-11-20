@@ -40,8 +40,8 @@ const DUREE_INVITE_MS = 6 * 3600e3;
 const DUREE_CODE_MS = 15 * 60e3;
 const ESSAIS_CODE = 5;
 const DEMANDES_PAR_HEURE = 5;
-const ACTIONS_INVITE = new Set(['ping', 'exports', 'fichier', 'lire', 'ecrire']); // pas de factures, ni d'À traiter, ni de cache
-const DOCS_INVITE = new Set(['liste-achat']);
+const ACTIONS_INVITE = new Set(['ping', 'exports', 'fichier']); // l'invité fait des étiquettes : il ne reçoit que les produits et leurs prix
+const DOCS_INVITE = new Set();
 const EXTENSIONS_FACTURE = /\.(pdf|jpe?g|png|heic)$/i;
 const EXTENSIONS_EXPORT = /\.(xlsx|csv|txt)$/i;
 
@@ -434,7 +434,7 @@ function inviteDemande(nom) {
     const heure = Utilities.formatDate(new Date(), 'Europe/Paris', 'HH:mm');
     MailApp.sendEmail(mailAdmin(), `Code invité : ${code}`,
       `${qui} demande un accès invité à l'appli (${heure}).\n\nCode : ${code}\n\nDonne-lui ce code seulement si tu le connais. ` +
-      `Il est valable 15 minutes et ouvre une session de 6 heures sur son téléphone : prix, ventes et liste d'achat, sans les factures ni les réglages.\n\n` +
+      `Il est valable 15 minutes et ouvre une session de 6 heures sur son téléphone pour scanner des produits, faire une planche d'étiquettes et l'imprimer. Rien d'autre : ni factures, ni achats, ni réglages.\n\n` +
       `Pour couper tout de suite toutes les sessions invitées : Réglages › Arrêter les sessions invitées.`);
     return { ok: true, demande: id, minutes: DUREE_CODE_MS / 60e3 };
   } finally { verrou.releaseLock(); }

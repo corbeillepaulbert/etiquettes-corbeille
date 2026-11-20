@@ -32,10 +32,10 @@ Appli de La Corbeille Paul Bert. Deux versions cohabitent sur le même site GitH
 - L'URL `/exec` de l'application Web n'est pas non plus dans le dépôt : elle se saisit dans Réglages.
 
 ### Mode invité (seule exception à la clé, justifiée)
-- Besoin : prêter l'appli quelques heures à une personne sans lui donner la clé du magasin.
+- Besoin : laisser une personne scanner les produits du rayon, faire une planche d'étiquettes et l'imprimer elle-même, quelques heures, sans lui donner la clé du magasin.
 - Le responsable envoie un lien `v2/#invite=<adresse /exec en base64>` (Réglages → Mode invité). L'adresse est dans le fragment : elle ne part jamais sur le réseau. **La clé n'est jamais dans le lien.**
 - Deux actions seulement acceptées sans clé : `inviteDemande` (envoie un code à 6 chiffres par `MailApp` à l'adresse du compte du magasin, ou à la propriété `MAIL_ADMIN` ; 5 demandes par heure au plus ; le code n'est jamais renvoyé à l'appli) et `inviteValider` (15 minutes, 5 essais ; renvoie un jeton de session).
-- Le jeton vaut 6 h. Il ouvre uniquement `ping`, `exports`, `fichier`, `lire`/`ecrire` du document `liste-achat`. Jamais les factures, À traiter, le cache ni les réglages.
+- Le jeton vaut 6 h. Il ouvre uniquement `ping`, `exports`, `fichier` (les produits et leurs prix, pour les étiquettes). Jamais les factures, À traiter, le cache, la liste d'achat ni les réglages. Dans l'appli, l'invité n'a que l'écran Étiquettes.
 - Code et jetons gardés en empreinte SHA-256 dans les propriétés du script (aucune écriture Drive). « Arrêter les sessions invitées » (avec la clé) les supprime toutes.
 - À la fin des 6 h, si le serveur refuse le jeton, ou sur « Quitter le mode invité » : l'appli efface toute la base `corbeille-v2` du téléphone invité.
 
