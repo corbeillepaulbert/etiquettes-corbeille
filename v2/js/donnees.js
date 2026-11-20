@@ -54,10 +54,21 @@ export function trouver(code) {
   return P[code] || P[code.padStart(13, '0')] || P[code.replace(/^0+/, '')] || null;
 }
 
+// ---------- périodes de ventes (exports Vente PLU datés) ----------
+let PERIODES = null;
+export async function lirePeriodes() { if (!PERIODES) PERIODES = await lire('periodes', {}); return PERIODES; }
+async function rangerPeriode(p) { const P = await lirePeriodes(); P[`${p.du}_${p.au}`] = p; await ecrire('periodes', P); }
+const jourMs = d => new Date(d + 'T12:00').getTime();
+/** Période rangée qui couvre [du, au] à `tol` jours près à chaque bout, sinon null. */
+export async function periodeCouvrant(du, au, tol = 2) {
+  const P = await lirePeriodes();
+  return Object.values(P).find(p => Math.abs(jourMs(p.du) - jourMs(du)) <= tol * 864e5 && Math.abs(jourMs(p.au) - jourMs(au)) <= tol * 864e5) || null;
+}
+
 export function joursVentes() { return etat.meta.ventes?.jours || 365; }
 
 /** Période d'un fichier de ventes, lue dans son nom (même règle que la V1). */
-function periodeDepuisNom(nom) {
+export function periodeDepuisNom(nom) {
   const m = nom.match(/(\d{2})[_.-](\d{2})[_.-](\d{2,4})[_ .-]+(?:au[_ .-]+)?(\d{2})[_.-](\d{2})[_.-](\d{2,4})/i);
   const Y = y => y.length === 2 ? '20' + y : y;
   if (!m) return { jours: 365, du: '', au: '' };
@@ -88,6 +99,11 @@ export async function importerFichier(file, origine = {}) {
   const cT = findCol(h, ['TAUX TVA', 'TVA']);
   const cFo = h.findIndex(x => /^FOURNISSEURACTIF$|^FOURNISSEUR$/.test(norm(x)));
   const cRf = h.findIndex(x => /^REFFOURNISSEUR$/.test(norm(x)));
+  const cSt = h.findIndex(x => norm(x) === 'STOCKACTUEL');
+  // Ventes : un fichier d'un an (ou plus) est la référence des fiches ; un fichier plus court (4 semaines, un Ramadan…) est rangé à part comme « période ».
+  const per = type === 'ventes' ? periodeDepuisNom(file.name) : null;
+  const principal = type === 'base' || !per.du || per.jours >= 300 || !etat.meta.ventes;
+  const qm = {};
   const P = { ...etat.produits };
   const vus = new Set();
   let n = 0;
@@ -108,8 +124,11 @@ export async function importerFichier(file, origine = {}) {
       if (cT >= 0) { const t = num(r[cT]); if (t != null) o.tva = t; }
       if (cFo >= 0) o.four = String(r[cFo] ?? '').replace(/^nan$/, '').trim();
       if (cRf >= 0) o.reff = String(r[cRf] ?? '').replace(/^nan$/, '').trim();
+      if (cSt >= 0) o.stk = num(r[cSt]);
     } else {
       const q = num(r[cQ]) || 0;
+      qm[e] = (qm[e] || 0) + q;
+      if (!principal) { vus.add(e); n++; continue; }
       o.q = (vus.has(e) ? (o.q || 0) : 0) + q; vus.add(e);
       if (o.prix == null && cP >= 0) o.prix = num(r[cP]);
       if (!o.dep && cD >= 0) o.dep = String(r[cD] ?? '').trim();
@@ -117,6 +136,8 @@ export async function importerFichier(file, origine = {}) {
     }
     P[e] = o; n++;
   }
+  if (per && per.du) await rangerPeriode({ ...per, nom: file.name, q: qm });
+  if (!principal) return { type: 'periode', lignes: n, du: per.du, au: per.au, jours: per.jours };
   if (type === 'ventes') {
     // les produits absents du nouveau fichier n'ont pas vendu sur la période
     for (const e of Object.keys(P)) if (!vus.has(e)) P[e] = { ...P[e], q: 0 };

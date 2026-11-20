@@ -1,8 +1,8 @@
 // Service worker de la V2. Portée : dossier v2/ uniquement.
 // Règle de cohabitation : ne touche JAMAIS aux caches de la V1 (préfixe « cpb- »), seulement aux siens (« cbv2- »).
-const V = 'cbv2-10';
+const V = 'cbv2-11';
 const COEUR = ['./', 'index.html', 'manifest.webmanifest', 'css/tokens.css', 'css/composants.css',
-  'js/app.js', 'js/livrer.js', 'js/inconnus.js', 'js/caisse.js', 'js/affiches.js', 'js/moteur/affiches.js', 'js/invite.js', 'js/atraiter.js', 'js/lectures.js', 'js/visionneuse.js', 'js/drive.js', 'js/facture.js', 'js/fournisseurs.js', 'js/recherche.js', 'js/moteur/facture.js', 'js/moteur/import.js', 'js/moteur/lecture.js', 'js/etiquettes.js', 'js/moteur/etiquettes.js', 'fonts/InterE-900.woff', 'fonts/InterE-700.woff', 'js/ecrans.js', 'js/calcul.js', 'js/icones.js', 'js/donnees.js', 'js/moteur/xlsx.js', 'js/moteur/scan.js',
+  'js/app.js', 'js/livrer.js', 'js/besoins.js', 'js/conseil.js', 'js/inconnus.js', 'js/caisse.js', 'js/affiches.js', 'js/moteur/affiches.js', 'js/invite.js', 'js/atraiter.js', 'js/lectures.js', 'js/visionneuse.js', 'js/drive.js', 'js/facture.js', 'js/fournisseurs.js', 'js/recherche.js', 'js/moteur/facture.js', 'js/moteur/import.js', 'js/moteur/lecture.js', 'js/etiquettes.js', 'js/moteur/etiquettes.js', 'fonts/InterE-900.woff', 'fonts/InterE-700.woff', 'js/ecrans.js', 'js/calcul.js', 'js/icones.js', 'js/donnees.js', 'js/moteur/xlsx.js', 'js/moteur/scan.js',
   'icones/icone-180.png', 'icones/icone-192.png', 'icones/icone-512.png'];
 const CDN = ['https://cdn.jsdelivr.net/npm/@zxing/library@0.21.3/umd/index.min.js'];
 self.addEventListener('install', e => {
