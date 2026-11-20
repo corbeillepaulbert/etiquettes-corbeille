@@ -6,6 +6,7 @@ import { euros } from './calcul.js';
 import { configurer, flOf, pagesFL, enSaison, ILLUSTRATIONS, ORIGINES } from './moteur/affiches.js';
 import { buildPdf } from './moteur/etiquettes.js';
 import { ouvrirScanner } from './moteur/scan.js';
+import { noterInconnu } from './inconnus.js';
 import { telecharger } from './livrer.js';
 
 const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
@@ -30,7 +31,7 @@ const liste = () => F.codes.map(e => etat.produits[e]).filter(Boolean);
 
 function ajouter(code) {
   const p = trouver(code);
-  if (!p) return { ok: false, txt: `${esc(code)} : code inconnu en caisse` };
+  if (!p) { noterInconnu(code, 'affiches'); return { ok: false, txt: `${esc(code)} : code inconnu en caisse` }; }
   if (!estFL(p)) return { ok: false, txt: `${esc(joli(p.lib))} : pas un fruit ou légume (va dans Étiquettes)` };
   if (F.codes.includes(p.e)) return { ok: false, txt: `${esc(joli(p.lib))} : déjà dans la liste` };
   F.codes.push(p.e); F.pdf = null;

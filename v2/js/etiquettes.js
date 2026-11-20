@@ -5,6 +5,7 @@ import { icone } from './icones.js';
 import { euros } from './calcul.js';
 import { configurer, nameOf, modelOf, isTop, cleanName, chk, labelStd, labelTop, pagesGondole, buildPdf, fitName } from './moteur/etiquettes.js';
 import { ouvrirScanner } from './moteur/scan.js';
+import { noterInconnu } from './inconnus.js';
 import { telecharger } from './livrer.js';
 
 const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
@@ -36,7 +37,7 @@ const liste = () => E.codes.map(e => etat.produits[e]).filter(Boolean);
 /** Ajoute un produit à la planche. Renvoie {ok, txt} comme le scan de la V1. */
 function ajouter(code) {
   const p = trouver(code);
-  if (!p) return { ok: false, txt: `${esc(code)} : code inconnu en caisse` };
+  if (!p) { noterInconnu(code, 'etiquettes'); return { ok: false, txt: `${esc(code)} : code inconnu en caisse` }; }
   if (estFL(p)) return { ok: false, txt: `${esc(joli(p.lib))} : fruit ou légume, il a son affiche` };
   if (E.codes.includes(p.e)) return { ok: false, txt: `${esc(joli(p.lib))} : déjà sur la planche` };
   E.codes.push(p.e);

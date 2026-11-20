@@ -208,3 +208,10 @@ html,body{margin:0;background:var(--papier)}
 .af-format b{font:700 18px/1.2 var(--font-texte)}
 .af-format span{font:400 15px/1.25 var(--font-texte);color:var(--encre-2)}
 .af-format--actif{background:var(--corbeille-clair);box-shadow:inset 0 0 0 3px var(--corbeille)}
+/* produits inconnus et mode caisse */
+.inc-carte{display:grid;gap:10px}
+.inc-l1{display:flex;justify-content:space-between;gap:12px;align-items:flex-start}
+.inc-img{width:72px;height:72px;object-fit:contain;border-radius:var(--rayon-s);background:#fff;flex:none}
+.caisse-res{display:grid;gap:10px}
+.caisse-nom{font:800 30px/1.15 var(--font-titre)}
+.caisse-prix{font:800 64px/1 var(--font-titre);color:var(--corbeille)}
