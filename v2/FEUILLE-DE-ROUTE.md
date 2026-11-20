@@ -1,30 +1,42 @@
-# Corbeille V2 — feuille de route
+# Corbeille V2 (PILOT) — feuille de route
 
-Mise à jour du 18/11/2026. Chaque lot s'utilise seul ; la V1 reste en production tant qu'un lot ne la remplace pas.
+Mise à jour du 20/11/2026. Chaque lot s'utilise seul ; la V1 reste en production tant que la V2 ne la remplace pas.
 
-## Ordre des lots
+## Fait
+
+| Lot | Contenu | PR |
+| --- | --- | --- |
+| 1 | Liaison Drive (Apps Script, À traiter, exports StorePOS automatiques, liste partagée) | #1, #2 |
+| 2a | Étiquettes épicerie, planche A4 identique à la V1, planche par défaut, PDF sur Mac | #3, #7 |
+| 2c | Travailler une facture : lecture, écarts de prix d'achat, prix de vente suggéré, écriture des prix et du stock (fichiers d'import) | #4, #6 |
+| 3 (partie) | À traiter en file d'attente : onglets, 3 factures en cours, cache des montants, diagnostics | #8 |
+| — | Mode invité pour les étiquettes (code par e-mail, session de 6 h) | #9 |
+| 2b | Affiches fruits et légumes, 4 formats identiques à la V1 | #10 |
+| 5 | Produits inconnus (file partagée, OpenFoodFacts, création de fiche mode 3) et mode caisse avec PIN | #12 |
+| 6 | Conseil d'achat par fournisseur ; exports datés demandés avec leurs dates exactes | #13 |
+| 8 | Mode Ramadan : Ramadan à Ramadan depuis 2023, tendance, dates limites, tuile à J-30 | #15 |
+
+## À tester sur l'iPhone (avant toute suite)
+
+- Les lots 2b, 5, 6 et 8 n'ont été testés que dans Chrome avec un faux Drive.
+- Exports à déposer dans EXPORTS STOREPOS, dates dans le nom du fichier : Vente PLU de chaque Ramadan (23/03 → 20/04/2023, 11/03 → 09/04/2024, 01/03 → 29/03/2025, 18/02 → 19/03/2026) et des 4 et 8 dernières semaines.
+- Conseil d'achat : deux choix par défaut à confirmer (usage chez soi la veille comme sur place ; « À ne pas prendre » = aucune vente sur 8 semaines ou baisse de plus de 70 %).
+
+## Reste à faire, dans l'ordre
 
 | Lot | Contenu | État |
 | --- | --- | --- |
-| 1 | Liaison Drive (Apps Script, À traiter, exports StorePOS automatiques, liste partagée) | fait |
-| 2a | Étiquettes épicerie, planche A4 identique à la V1 | fait (PR #3) |
-| 2c | Travailler une facture : lecture, écarts de prix d'achat, prix de vente suggéré (règles V1) | lecture faite (PR #4) ; **en cours : écriture des prix et du stock** |
-| 2b | Affiches fruits et légumes (règles V1, affichage « conforme » sur iPad) | à faire |
-| 3 | Réception et À traiter : file réparée, compteur honnête, cash & carry reconnu | à faire (liste des bugs attendue) |
-| 4 | Fichier d'import StorePOS complet (25 colonnes, modes 1/2/3, test sur une ligne) | à faire |
-| 5 | Produits inconnus en caisse, OpenFoodFacts, code PIN par caissier | à faire |
-| 6 | **Achat refondu : « Conseil d'achat » par fournisseur** (À prendre cette fois, À ne pas prendre, promo manuelle ; DLUO par famille ; calcul sur les ventes, stock affiché mais jamais décisif) | spec complète attendue |
-| 7 | Inventaire (après le gros inventaire physique) | à faire, pas avant |
-| 8 | **Mode Ramadan** | teaser fait, code après validation |
+| 9 | **Étiquettes intelligentes** : l'appli retient le prix imprimé de chaque étiquette ; à chaque export produits, « N étiquettes à refaire » avec la planche prête. Ajout automatique des prix changés par une facture, des fiches créées et des passages en (ou hors) « Top vente ». | à faire |
+| 10 | **Refonte du nom produit** : nom court et lisible pour l'étiquette (produit, marque, poids), proposé depuis le nom en caisse et OpenFoodFacts, validé d'un geste, repris sur toutes les étiquettes. | à faire |
+| 11 | **Propositions de changement de prix** : après une facture, les hausses de prix d'achat avec le prix suggéré (règle V1) ; sur tout le catalogue, les produits sous 25 % de marge, classés par manque à gagner ; « Prendre » par ligne, un seul fichier d'import, étiquettes ajoutées. | à faire |
+| 12 | **Point hebdo sur 7 jours glissants** : achats des 7 jours (factures du Drive, sans export) ; ventes des 7 jours avec un seul petit export par semaine (chiffre d'affaires par jour, demandé le lundi avec ses dates) ; meilleures ventes du dernier gros export, date affichée ; à faire de la semaine (factures, inconnus, étiquettes à refaire, prix à revoir). | à faire |
+| 3 (fin) | Réception : factures des grossistes en libre-service (Metro, Promocash) reconnues | à faire |
+| 4 | Fichier d'import StorePOS complet (modes 1/2/3 pour toutes les fiches, pas seulement les inconnus) | à faire |
+| — | PILOT dans l'appli : nom, icône, couleur indigo (si validé) | à décider |
+| 7 | Inventaire (après le gros inventaire physique) | pas avant |
+| — | Bascule : la V2 remplace la V1 à la racine, copie de la V1 gardée quelques semaines | après les tests iPhone |
 
-## Lot 8 — Mode Ramadan
-
-- **Dates** : table statique `v2/donnees/ramadan.json` (début du jeûne et Aïd en France, 2014 à 2030, Grande Mosquée de Paris). Pas de calendrier hégirien calculé. Les années prévisionnelles se corrigent à la main après la Nuit du doute.
-- **Alerte** : à J-30 du début, une tuile « Préparer le Ramadan » apparaît sur l'accueil.
-- **Écran** : les produits saisonniers (dattes, chorba, feuilles de brick, frik, laben, raib…), et pour chacun « L'an dernier tu as vendu X, cette année prévois Y ».
-- **Calcul** : moyenne des ventes des Ramadans passés (période exacte de chaque Ramadan, jamais « même mois l'an dernier »), corrigée par la tendance des 3 dernières semaines, bornée par la DLUO (sinon « prends N maintenant, le reste en plusieurs fois »). Réutilise le moteur du lot 6.
-- **Prérequis** : un export Vente PLU de StorePOS par Ramadan passé, sur ses dates exactes. À vérifier : jusqu'à quelle année l'historique de la caisse remonte.
-- **Calendrier** : Ramadan 2027 attendu le 8 février, donc tuile visible vers le 9 janvier 2027. Pour servir dès 2027, le lot doit être prêt début janvier.
+Idée de la maquette non retenue pour l'instant : dates courtes (alerte 10 jours avant la date limite).
 
 ## Critères de succès
 
@@ -34,3 +46,4 @@ Mise à jour du 18/11/2026. Chaque lot s'utilise seul ; la V1 reste en productio
 4. Une facture se traite en moins de 2 minutes.
 5. Moins de visites fournisseurs (cible Metro et Promocash : une par mois au lieu d'une par semaine), sans produit périmé.
 6. **Capacité à anticiper les pics de vente saisonniers sans rupture de stock.**
+7. Plus aucune étiquette au mauvais prix en rayon.
