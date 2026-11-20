@@ -10,6 +10,8 @@ import { filtrer, fournisseursCaisse } from './fournisseurs.js';
 import { chercher } from './recherche.js';
 import { ouvrirVisionneuse } from './visionneuse.js';
 import { chargerAffiches, actionAffiches } from './affiches.js';
+import { chargerInconnus, actionInconnus, noterInconnu, synchroniserInconnus, aIdentifier, siInconnuChange } from './inconnus.js';
+import { chargerCaisse, actionCaisse, modeCaisse, ecranCaisse, blocCaisse, interditEnCaisse } from './caisse.js';
 import { chargerFacture, actionFacture, brancherFacture, estEnCours, reprendreEnCours, retirerEnCours, restaurerEnCours } from './facture.js';
 import { ecranATraiter, choisirOnglet, nomFournisseur } from './atraiter.js';
 import { chargerLectures, chargerCache, lirePremieres } from './lectures.js';
@@ -53,6 +55,7 @@ let urlInvitation = ''; // adresse /exec venue d'un lien d'invitation, en attent
 let demandeInvite = null; // { demande, minutes, nom }
 async function accueil() {
   courant = null;
+  if (modeCaisse()) { afficher(ecranCaisse(), 'caisse'); return; }
   if (estInvite()) { afficher(ecranAccueilInvite({ fin: finInvite(), nom: nomInvite(), donnees: resumeDonnees(), planche: (await lire('etiqSelection', [])).length }), 'accueil'); return; }
   if (!estRelie() && urlInvitation) {
     afficher(`<div class="scr cb"><div class="scr__corps"><h1 class="titre-1">Bonjour</h1>
@@ -64,7 +67,7 @@ async function accueil() {
   afficher(ecranAccueil({
     bonjour: 'Bonjour', date: dateDuJour(), aTraiter: nouveaux(), donnees: resumeDonnees(),
     petites: [['etiquettes', 'imprimer', 'Étiquettes'], ['affiches', 'frais', 'Affiches fruits et légumes'], ['factures', 'facture', 'Travailler une facture'], ['liste', 'achat', `Ma liste d'achat${etat.liste.length ? ` (${etat.liste.length})` : ''}`]],
-    liens: [['donnees', 'Mettre à jour les ventes'], ['reglages', 'Réglages']]
+    liens: [['inconnus', `Produits inconnus${aIdentifier().length ? ` (${aIdentifier().length})` : ''}`], ['donnees', 'Mettre à jour les ventes'], ['reglages', 'Réglages']]
   }), 'accueil');
 }
 
@@ -117,7 +120,7 @@ function scanner(m = mode) {
 
 function resultat(code) {
   const p = trouver(code);
-  if (!p) { eclair('inconnu', 'Code inconnu', '', code, () => inconnu(code)); return; }
+  if (!p) { noterInconnu(code, mode); eclair('inconnu', 'Code inconnu', '', code, () => inconnu(code)); return; }
   eclair('ok', joli(p.lib), euros(p.prix), mode === 'achat' ? 'Achat' : 'Magasin', () => fiche(p));
 }
 
@@ -137,7 +140,8 @@ function inconnu(code) {
     <h1 class="titre-1">Code inconnu</h1>
     <div class="carte" style="display:grid;gap:12px"><div class="titre-2">${esc(code)}</div>
       <div>Ce code n'est pas dans les produits chargés.</div>
-      <div class="note">S'il vient d'être créé en caisse, mets à jour les produits. Sinon, la fiche se crée dans l'appli actuelle pour l'instant.</div></div>
+      <div class="note">Il est ajouté aux produits inconnus : la fiche se crée de là (OpenFoodFacts, fichier d'import StorePOS). S'il vient d'être créé en caisse, mets à jour les produits.</div>
+      ${estInvite() ? '' : '<button class="btn btn--secondaire" data-action="inconnus">Voir les produits inconnus</button>'}</div>
   </div>
   <div class="scr__bas"><button class="btn btn--principal" data-action="scanner">${icone('scan')}Scanner un autre produit</button>
   <button class="btn btn--secondaire" data-action="accueil">Retour à l'accueil</button></div></div>`);
@@ -213,6 +217,7 @@ function reglages() {
       <label class="fort" for="nom-app">Nom de cet appareil</label><input class="champ" id="nom-app" value="${esc(nomAppareil)}" placeholder="iPhone du magasin" style="font-size:18px">
       <div class="note">Il apparaît à côté des factures marquées « traitées ».</div>
     </div>
+    ${blocCaisse()}
     <div class="note">Version : lot 1 + liaison Drive. Données : ${resumeDonnees()}</div>
   </div>
   <div class="scr__bas"><button class="btn btn--principal" data-action="fin-reglages">Terminé</button></div></div>`, 'reglages');
@@ -259,12 +264,15 @@ function toast(texte, annuler) {
 }
 
 // ---------- actions ----------
-const nav = { afficher: (h, n) => afficher(h, n), toast: (t, f) => toast(t, f), donnees: m => donnees(m), sync: () => syncFond(true) };
+const nav = { afficher: (h, n) => afficher(h, n), toast: (t, f) => toast(t, f), donnees: m => donnees(m), sync: () => syncFond(true), reglages: () => reglages(), accueil: () => accueil() };
 app.addEventListener('click', async e => {
   const b = e.target.closest('[data-action]'); if (!b) return;
   const a = b.dataset.action;
   if (/^at-/.test(a) || a === 'rafraichir' || a === 'traite' || a === 'a-traiter' || a === 'tester-script') console.log(`[V2/ATraiter] clic « ${a} »${b.dataset.id ? ' facture ' + b.dataset.id : ''}`);
   if (await actionEtiquettes(a, b, nav)) return;
+  if (interditEnCaisse(a)) { console.warn('[V2/Caisse] action refusée :', a); return accueil(); }
+  if (await actionCaisse(a, b, nav)) return;
+  if (await actionInconnus(a, b, nav)) return;
   if (await actionAffiches(a, b, nav)) return;
   if (await actionFacture(a, b, nav)) return;
   if (estInvite() && INTERDIT_INVITE.test(a)) { console.warn('[V2/Invité] action refusée :', a); return accueil(); }
@@ -420,7 +428,7 @@ ecouterDouchette(code => { if (!document.querySelector('.scan-plein')) resultat(
 
 // ---------- mode invité : fin de session ----------
 // L'invité ne fait que des étiquettes : tout le reste est refusé (et le serveur ne lui donne que les produits).
-const INTERDIT_INVITE = /^(factures|fac-.*|a-traiter|at-.*|rafraichir|traite|reglages|fin-reglages|relier|delier|tester-script|donnees|exports-drive|reprendre-v1|mode|scanner|scanner-achat|liste|ouvrir-fiche|vider|retirer|affiches|af-.*|invite-lien|invite-arreter)$/;
+const INTERDIT_INVITE = /^(factures|fac-.*|a-traiter|at-.*|rafraichir|traite|reglages|fin-reglages|relier|delier|tester-script|donnees|exports-drive|reprendre-v1|mode|scanner|scanner-achat|liste|ouvrir-fiche|vider|retirer|affiches|af-.*|inconnus|inc-.*|caisse-.*|invite-lien|invite-arreter)$/;
 let minuteurInvite = null;
 function surveillerInvite() {
   clearInterval(minuteurInvite);
@@ -439,6 +447,7 @@ async function terminerInvite() {
   urlInvitation = '';
   afficher(ecranInviteFini(), 'invite-fini');
 }
+siInconnuChange(() => planifierSync());
 siInviteFini(() => { if (estInvite()) terminerInvite(); });
 document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible' && estInvite() && Date.now() >= finInvite()) terminerInvite(); });
 
@@ -456,6 +465,7 @@ async function syncFond(force = false) {
       if (faits.length) toast(`Mis à jour depuis le Drive : ${faits.map(r => r.type === 'ventes' ? 'ventes' : 'produits').join(' et ')}`);
     } catch (x) { }
     try { if (await lire('listeAEnvoyer', false) || force || ecranCourant === 'liste') await synchroniserListe(); } catch (x) { }
+    if (!estInvite()) { try { if (await lire('inconnusAEnvoyer', false) || force) await synchroniserInconnus(); } catch (x) { } }
   } finally {
     syncEnCours = false;
     if (ecranCourant === 'accueil') accueil();
@@ -480,6 +490,8 @@ document.addEventListener('visibilitychange', () => { if (document.visibilitySta
   await chargerEtiquettes();
   await chargerFacture();
   await chargerAffiches();
+  await chargerInconnus();
+  await chargerCaisse();
   await chargerLectures();
   cacheAT = await aTraiterEnCache();
   nomAppareil = await lire('nomAppareil', '');
