@@ -9,6 +9,7 @@ import { chargerEtiquettes, actionEtiquettes } from './etiquettes.js';
 import { filtrer, fournisseursCaisse } from './fournisseurs.js';
 import { chercher } from './recherche.js';
 import { ouvrirVisionneuse } from './visionneuse.js';
+import { chargerAffiches, actionAffiches } from './affiches.js';
 import { chargerFacture, actionFacture, brancherFacture, estEnCours, reprendreEnCours, retirerEnCours, restaurerEnCours } from './facture.js';
 import { ecranATraiter, choisirOnglet, nomFournisseur } from './atraiter.js';
 import { chargerLectures, chargerCache, lirePremieres } from './lectures.js';
@@ -62,7 +63,7 @@ async function accueil() {
   }
   afficher(ecranAccueil({
     bonjour: 'Bonjour', date: dateDuJour(), aTraiter: nouveaux(), donnees: resumeDonnees(),
-    petites: [['etiquettes', 'imprimer', 'Étiquettes'], ['factures', 'facture', 'Travailler une facture'], ['liste', 'achat', `Ma liste d'achat${etat.liste.length ? ` (${etat.liste.length})` : ''}`]],
+    petites: [['etiquettes', 'imprimer', 'Étiquettes'], ['affiches', 'frais', 'Affiches fruits et légumes'], ['factures', 'facture', 'Travailler une facture'], ['liste', 'achat', `Ma liste d'achat${etat.liste.length ? ` (${etat.liste.length})` : ''}`]],
     liens: [['donnees', 'Mettre à jour les ventes'], ['reglages', 'Réglages']]
   }), 'accueil');
 }
@@ -264,6 +265,7 @@ app.addEventListener('click', async e => {
   const a = b.dataset.action;
   if (/^at-/.test(a) || a === 'rafraichir' || a === 'traite' || a === 'a-traiter' || a === 'tester-script') console.log(`[V2/ATraiter] clic « ${a} »${b.dataset.id ? ' facture ' + b.dataset.id : ''}`);
   if (await actionEtiquettes(a, b, nav)) return;
+  if (await actionAffiches(a, b, nav)) return;
   if (await actionFacture(a, b, nav)) return;
   if (estInvite() && INTERDIT_INVITE.test(a)) { console.warn('[V2/Invité] action refusée :', a); return accueil(); }
   if (a === 'accueil') return accueil();
@@ -418,7 +420,7 @@ ecouterDouchette(code => { if (!document.querySelector('.scan-plein')) resultat(
 
 // ---------- mode invité : fin de session ----------
 // L'invité ne fait que des étiquettes : tout le reste est refusé (et le serveur ne lui donne que les produits).
-const INTERDIT_INVITE = /^(factures|fac-.*|a-traiter|at-.*|rafraichir|traite|reglages|fin-reglages|relier|delier|tester-script|donnees|exports-drive|reprendre-v1|mode|scanner|scanner-achat|liste|ouvrir-fiche|vider|retirer|invite-lien|invite-arreter)$/;
+const INTERDIT_INVITE = /^(factures|fac-.*|a-traiter|at-.*|rafraichir|traite|reglages|fin-reglages|relier|delier|tester-script|donnees|exports-drive|reprendre-v1|mode|scanner|scanner-achat|liste|ouvrir-fiche|vider|retirer|affiches|af-.*|invite-lien|invite-arreter)$/;
 let minuteurInvite = null;
 function surveillerInvite() {
   clearInterval(minuteurInvite);
@@ -477,6 +479,7 @@ document.addEventListener('visibilitychange', () => { if (document.visibilitySta
   if (estInvite()) surveillerInvite();
   await chargerEtiquettes();
   await chargerFacture();
+  await chargerAffiches();
   await chargerLectures();
   cacheAT = await aTraiterEnCache();
   nomAppareil = await lire('nomAppareil', '');
