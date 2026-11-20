@@ -67,7 +67,7 @@ async function ecranConseil(nav, message = '') {
       <div class="ligne__detail">${x.v4} vendus en 4 sem. · ${x.c.nom.toLowerCase()} ${x.c.couv} j${x.rupture != null ? ` · rupture vers ${x.rupture} j (stock théorique)` : ''}</div>
       ${x.limite ? `<div class="cons-dluo">Date limite ${duree(x.dluo)} : ne prends que ${x.max}</div>` : ''}</button>
       <div class="cons-qte"><b>${x.qte}</b>${ajoutes.has(x.o.e) ? `<span class="exp-ok">${icone('check', 'cb-ico cb-ico--24')}</span>` : `<button class="btn btn--achat cons-ajout" data-action="cons-ajouter" data-e="${esc(x.o.e)}" aria-label="Ajouter à ma liste">+</button>`}</div></div>`;
-  nav.afficher(`<div class="scr cb">${barreMode('achat', nomF, true)}<div class="scr__corps">
+  nav.afficher(`<div class="scr cb" data-ecran="conseil">${barreMode('achat', nomF, true)}<div class="scr__corps">
     <h1 class="titre-1">${esc(nomF)}</h1>
     ${message ? `<div class="bandeau bandeau--alerte">${icone('info', 'cb-ico cb-ico--24')}<span>${message}</span></div>` : ''}
     ${carteExports(besoins, 'Pour calculer le conseil d\'achat')}
@@ -131,7 +131,7 @@ async function feuillePromo(nav, code) {
 }
 
 export async function actionConseil(a, b, nav) {
-  if (await actionBesoins(a, b, () => ecranConseil(nav), nav.toast)) return true;
+  if (document.querySelector('.scr[data-ecran="conseil"]') && await actionBesoins(a, b, () => ecranConseil(nav), nav.toast)) return true;
   if (a !== 'conseil' && !a.startsWith('cons-')) return false;
   if (a === 'conseil') { ecranFournisseurs(nav); return true; }
   if (a === 'cons-four') { choix = b.dataset.f; ajoutes = new Set(etat.liste.map(l => l.e)); await ecranConseil(nav); return true; }

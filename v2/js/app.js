@@ -11,6 +11,7 @@ import { chercher } from './recherche.js';
 import { ouvrirVisionneuse } from './visionneuse.js';
 import { chargerAffiches, actionAffiches } from './affiches.js';
 import { chargerConseil, actionConseil } from './conseil.js';
+import { actionRamadan, tuileRamadan } from './ramadan.js';
 import { chargerInconnus, actionInconnus, noterInconnu, synchroniserInconnus, aIdentifier, siInconnuChange } from './inconnus.js';
 import { chargerCaisse, actionCaisse, modeCaisse, ecranCaisse, blocCaisse, interditEnCaisse } from './caisse.js';
 import { chargerFacture, actionFacture, brancherFacture, estEnCours, reprendreEnCours, retirerEnCours, restaurerEnCours } from './facture.js';
@@ -67,7 +68,9 @@ async function accueil() {
       </div></div>`, 'accueil');
     return;
   }
+  const ram = await tuileRamadan();
   afficher(ecranAccueil({
+    extra: ram,
     bonjour: 'Bonjour', date: dateDuJour(), aTraiter: nouveaux(), donnees: resumeDonnees(),
     petites: [['etiquettes', 'imprimer', 'Étiquettes'], ['affiches', 'frais', 'Affiches fruits et légumes'], ['factures', 'facture', 'Travailler une facture'], ['liste', 'achat', `Ma liste d'achat${etat.liste.length ? ` (${etat.liste.length})` : ''}`]],
     liens: [['inconnus', `Produits inconnus${aIdentifier().length ? ` (${aIdentifier().length})` : ''}`], ['donnees', 'Mettre à jour les ventes'], ['reglages', 'Réglages']]
@@ -88,7 +91,8 @@ async function ouvrirMode(m) {
     <div id="rech-repos">
     ${vide ? `<div class="carte"><div class="titre-2">Aucun produit chargé.</div><div class="note" style="margin-top:8px">Touche « Mettre à jour les ventes » sur l'accueil.</div></div>` : ''}
     ${p ? `<button class="ligne" data-action="ouvrir-fiche" data-e="${esc(p.e)}" style="border:0;font:inherit;text-align:left;width:100%"><div class="ligne__ico">${icone(m)}</div><div class="ligne__txt"><div class="ligne__titre">${esc(joli(p.lib))}</div><div class="ligne__detail">Dernière fiche · ${euros(p.prix)}</div></div></button>` : ''}
-    ${m === 'achat' ? `<button class="ligne" data-action="conseil" style="border:0;font:inherit;text-align:left;width:100%"><div class="ligne__ico">${icone('courbe')}</div><div class="ligne__txt"><div class="ligne__titre">Conseil d'achat</div><div class="ligne__detail">Ce qu'il faut prendre chez chaque fournisseur</div></div></button>` : ''}
+    ${m === 'achat' ? `<button class="ligne" data-action="conseil" style="border:0;font:inherit;text-align:left;width:100%"><div class="ligne__ico">${icone('courbe')}</div><div class="ligne__txt"><div class="ligne__titre">Conseil d'achat</div><div class="ligne__detail">Ce qu'il faut prendre chez chaque fournisseur</div></div></button>
+      <button class="ligne" data-action="ramadan" style="border:0;font:inherit;text-align:left;width:100%"><div class="ligne__ico">${icone('agenda')}</div><div class="ligne__txt"><div class="ligne__titre">Préparer le Ramadan</div><div class="ligne__detail">Ramadan à Ramadan, avec les dates limites</div></div></button>` : ''}
     ${m === 'achat' ? `<button class="ligne" data-action="liste" style="border:0;font:inherit;text-align:left;width:100%"><div class="ligne__ico">${icone('achat')}</div><div class="ligne__txt"><div class="ligne__titre">Ma liste d'achat</div><div class="ligne__detail">${etat.liste.length ? etat.liste.length + ' produit(s)' : 'Vide pour l\'instant'}</div></div></button>` : ''}
     </div>
   </div>
@@ -277,6 +281,7 @@ app.addEventListener('click', async e => {
   if (interditEnCaisse(a)) { console.warn('[V2/Caisse] action refusée :', a); return accueil(); }
   if (await actionCaisse(a, b, nav)) return;
   if (await actionInconnus(a, b, nav)) return;
+  if (await actionRamadan(a, b, nav)) return;
   if (await actionConseil(a, b, nav)) return;
   if (await actionAffiches(a, b, nav)) return;
   if (await actionFacture(a, b, nav)) return;
@@ -433,7 +438,7 @@ ecouterDouchette(code => { if (!document.querySelector('.scan-plein')) resultat(
 
 // ---------- mode invité : fin de session ----------
 // L'invité ne fait que des étiquettes : tout le reste est refusé (et le serveur ne lui donne que les produits).
-const INTERDIT_INVITE = /^(factures|fac-.*|a-traiter|at-.*|rafraichir|traite|reglages|fin-reglages|relier|delier|tester-script|donnees|exports-drive|reprendre-v1|mode|scanner|scanner-achat|liste|ouvrir-fiche|vider|retirer|affiches|af-.*|inconnus|inc-.*|caisse-.*|conseil|cons-.*|besoins-.*|invite-lien|invite-arreter)$/;
+const INTERDIT_INVITE = /^(factures|fac-.*|a-traiter|at-.*|rafraichir|traite|reglages|fin-reglages|relier|delier|tester-script|donnees|exports-drive|reprendre-v1|mode|scanner|scanner-achat|liste|ouvrir-fiche|vider|retirer|affiches|af-.*|inconnus|inc-.*|caisse-.*|conseil|cons-.*|besoins-.*|ramadan|ram-.*|invite-lien|invite-arreter)$/;
 let minuteurInvite = null;
 function surveillerInvite() {
   clearInterval(minuteurInvite);

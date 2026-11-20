@@ -230,3 +230,10 @@ html,body{margin:0;background:var(--papier)}
 .cons-qte b{font:800 30px/1 var(--font-titre);color:var(--achat)}
 .cons-ajout{min-height:48px;width:56px;padding:0;font:800 28px/1 var(--font-titre)}
 .cons-pas{display:grid;gap:2px;padding:8px 0;border-top:1px solid var(--trait)}
+/* ramadan */
+.tuile--ramadan{background:linear-gradient(120deg,var(--achat),var(--inventaire));color:#fff}
+.ram-entete{display:flex;gap:16px;align-items:center;background:linear-gradient(120deg,var(--alerte-fond),var(--papier));border-radius:var(--rayon-m);padding:16px}
+.ram-lune{width:56px;height:56px;border-radius:50%;box-shadow:-12px 8px 0 0 var(--abricot);transform:rotate(-20deg);flex:none;margin-left:14px}
+.ram-quand{font:700 18px var(--font-texte);color:var(--inventaire)}
+.ram-histo{display:flex;flex-wrap:wrap;gap:4px 12px;font:500 15px/20px var(--font-texte);color:var(--encre-2);margin-top:4px}
+.scr__corps:has(+ .fab){padding-bottom:112px}
