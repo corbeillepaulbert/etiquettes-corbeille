@@ -27,6 +27,13 @@ export async function ecrire(cle, valeur) {
   });
 }
 
+/** Fin de session invitée : tout ce que l'appareil a reçu est effacé. */
+export async function toutEffacer() {
+  const d = await db();
+  await new Promise((r, j) => { const t = d.transaction(MAGASIN, 'readwrite'); t.objectStore(MAGASIN).clear(); t.oncomplete = () => r(); t.onerror = () => j(t.error); });
+  etat.produits = {}; etat.meta = {}; etat.liste = []; etat.listeSupprimes = {};
+}
+
 export const etat = { produits: {}, meta: {}, reglages: { semaines: 1, seuilTop: 365 }, liste: [], listeSupprimes: {} };
 
 export async function charger() {

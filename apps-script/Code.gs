@@ -11,6 +11,10 @@
  *       Qui a accès : Tout le monde
  *     Copier l'adresse qui finit par /exec et la saisir dans l'appli : Réglages › Liaison avec le Drive.
  *
+ * MODE INVITÉ (version 5) : après avoir recollé ce fichier, exécuter une fois installer() et accepter la nouvelle
+ * autorisation « Envoyer des e-mails en votre nom » (le code d'accès part sur l'adresse du compte du magasin,
+ * ou sur la propriété MAIL_ADMIN si elle existe). Puis Déployer › Gérer les déploiements › Modifier › Nouvelle version.
+ *
  * CHANGER LA CLÉ : écrire la nouvelle valeur dans la propriété CLE_NOUVELLE, puis exécuter rotationCle().
  * L'ancienne clé reste acceptée 7 jours, le temps de mettre à jour chaque appareil.
  *
@@ -20,7 +24,7 @@
  *  - Le secret n'apparaît jamais dans un journal ni dans une réponse.
  */
 
-const VERSION = 4;
+const VERSION = 5;
 const NOM_FACTURES = 'FACTURES ACHAT';
 const NOM_EXPORTS = 'EXPORTS STOREPOS';
 const NOM_APPLI = 'APPLI ETIQUETTES CORBEILLE';
@@ -31,6 +35,13 @@ const FENETRE_JOURS = 90;
 const JOURS_TRAITEES = 365; // les factures traitées restent consultables (archives) bien après les 90 jours
 const NOM_CACHE = 'FACTURES_CACHE';
 const ID_VALIDE = /^[A-Za-z0-9_-]{10,80}$/;
+// Mode invité : une session de 6 h ouverte par un code à 6 chiffres envoyé au responsable.
+const DUREE_INVITE_MS = 6 * 3600e3;
+const DUREE_CODE_MS = 15 * 60e3;
+const ESSAIS_CODE = 5;
+const DEMANDES_PAR_HEURE = 5;
+const ACTIONS_INVITE = new Set(['ping', 'exports', 'fichier']); // l'invité fait des étiquettes : il ne reçoit que les produits et leurs prix
+const DOCS_INVITE = new Set();
 const EXTENSIONS_FACTURE = /\.(pdf|jpe?g|png|heic)$/i;
 const EXTENSIONS_EXPORT = /\.(xlsx|csv|txt)$/i;
 
@@ -41,10 +52,22 @@ const props = () => PropertiesService.getScriptProperties();
 function doPost(e) {
   let req = {};
   try { req = JSON.parse((e && e.postData && e.postData.contents) || '{}'); } catch (x) { return repondre({ ok: false }); }
-  if (!cleValide(req.cle)) return repondre({ ok: false });
+  try {
+    // Deux seules actions sans clé : demander un code invité, et l'échanger contre une session de 6 h.
+    if (req.action === 'inviteDemande') return repondre(inviteDemande(req.nom));
+    if (req.action === 'inviteValider') return repondre(inviteValider(req.demande, req.code));
+  } catch (x) { return repondre({ ok: false, erreur: 'réessaie dans un instant' }); }
+  let invite = null;
+  if (req.jeton) {
+    invite = sessionInvite(req.jeton);
+    if (!invite) return repondre({ ok: false, invite: 'fini' }); // session finie ou coupée : l'appli invitée s'efface
+    if (!ACTIONS_INVITE.has(req.action)) return repondre({ ok: false });
+    if ((req.action === 'lire' || req.action === 'ecrire') && !DOCS_INVITE.has(req.doc)) return repondre({ ok: false });
+  } else if (!cleValide(req.cle)) return repondre({ ok: false });
   try {
     switch (req.action) {
-      case 'ping': return repondre({ ok: true, version: VERSION });
+      case 'ping': return repondre(invite ? { ok: true, version: VERSION, invite: true, fin: invite.fin } : { ok: true, version: VERSION });
+      case 'inviteArreter': return repondre(arreterInvites());
       case 'aTraiter': return repondre({ ok: true, ...lireATraiter() });
       case 'rafraichir': return repondre({ ok: true, ...rafraichir() });
       case 'traiter': return repondre({ ok: true, ...marquer(req.id, req.etat, req.par) });
@@ -382,10 +405,84 @@ function ecrireDoc(doc, valeur, version) {
   } finally { verrou.releaseLock(); }
 }
 
+// ---------------------------------------------------------------- mode invité (aucune écriture dans le Drive : tout est dans les propriétés du script)
+
+/** Empreinte SHA-256 : ni le code ni le jeton ne sont gardés en clair. */
+function empreinte(t) {
+  return Utilities.base64EncodeWebSafe(Utilities.computeDigest(Utilities.DigestAlgorithm.SHA_256, String(t), Utilities.Charset.UTF_8));
+}
+function lireProp(nom, defaut) { try { return JSON.parse(props().getProperty(nom) || '') || defaut; } catch (x) { return defaut; } }
+function ecrireProp(nom, v) { props().setProperty(nom, JSON.stringify(v)); }
+function mailAdmin() { return props().getProperty('MAIL_ADMIN') || Session.getEffectiveUser().getEmail(); }
+
+/** Un invité demande l'accès : un code à 6 chiffres part par e-mail au responsable. Le code n'est jamais renvoyé à l'appli. */
+function inviteDemande(nom) {
+  const verrou = LockService.getScriptLock();
+  verrou.waitLock(20000);
+  try {
+    const maintenant = Date.now();
+    const journal = lireProp('INVITE_JOURNAL', []).filter(t => maintenant - t < 3600e3);
+    if (journal.length >= DEMANDES_PAR_HEURE) return { ok: false, erreur: 'trop de demandes : réessaie dans une heure' };
+    const qui = String(nom || '').replace(/[^\p{L}\p{N} '.-]/gu, '').trim().slice(0, 30) || 'Un invité';
+    const demandes = lireProp('INVITE_DEMANDES', {});
+    for (const k of Object.keys(demandes)) if (demandes[k].exp < maintenant) delete demandes[k];
+    const id = Utilities.getUuid().replace(/-/g, '');
+    const code = String(parseInt(Utilities.getUuid().replace(/-/g, '').slice(0, 12), 16) % 1000000).padStart(6, '0');
+    demandes[id] = { h: empreinte(id + code), exp: maintenant + DUREE_CODE_MS, essais: 0, nom: qui };
+    journal.push(maintenant);
+    ecrireProp('INVITE_DEMANDES', demandes); ecrireProp('INVITE_JOURNAL', journal);
+    const heure = Utilities.formatDate(new Date(), 'Europe/Paris', 'HH:mm');
+    MailApp.sendEmail(mailAdmin(), `Code invité : ${code}`,
+      `${qui} demande un accès invité à l'appli (${heure}).\n\nCode : ${code}\n\nDonne-lui ce code seulement si tu le connais. ` +
+      `Il est valable 15 minutes et ouvre une session de 6 heures sur son téléphone pour scanner des produits, faire une planche d'étiquettes et l'imprimer. Rien d'autre : ni factures, ni achats, ni réglages.\n\n` +
+      `Pour couper tout de suite toutes les sessions invitées : Réglages › Arrêter les sessions invitées.`);
+    return { ok: true, demande: id, minutes: DUREE_CODE_MS / 60e3 };
+  } finally { verrou.releaseLock(); }
+}
+
+/** L'invité tape le code : s'il est bon, il reçoit un jeton valable 6 h. 5 essais au plus par code. */
+function inviteValider(id, code) {
+  const verrou = LockService.getScriptLock();
+  verrou.waitLock(20000);
+  try {
+    const demandes = lireProp('INVITE_DEMANDES', {});
+    const d = demandes[String(id || '')];
+    if (!d || d.exp < Date.now()) { if (d) { delete demandes[id]; ecrireProp('INVITE_DEMANDES', demandes); } return { ok: false, erreur: 'code expiré : demande un nouveau code' }; }
+    d.essais++;
+    if (!egalTempsConstant(empreinte(id + String(code || '').replace(/\D/g, '')), d.h)) {
+      if (d.essais >= ESSAIS_CODE) { delete demandes[id]; ecrireProp('INVITE_DEMANDES', demandes); return { ok: false, erreur: 'trop d\'essais : demande un nouveau code' }; }
+      ecrireProp('INVITE_DEMANDES', demandes);
+      return { ok: false, erreur: `code faux (encore ${ESSAIS_CODE - d.essais} essai${ESSAIS_CODE - d.essais > 1 ? 's' : ''})` };
+    }
+    delete demandes[id]; ecrireProp('INVITE_DEMANDES', demandes);
+    const jeton = Utilities.getUuid().replace(/-/g, '') + Utilities.getUuid().replace(/-/g, '');
+    const fin = Date.now() + DUREE_INVITE_MS;
+    const sessions = purgerSessions(lireProp('INVITE_SESSIONS', {}));
+    sessions[empreinte(jeton)] = { fin, nom: d.nom };
+    ecrireProp('INVITE_SESSIONS', sessions);
+    return { ok: true, jeton, fin, nom: d.nom };
+  } finally { verrou.releaseLock(); }
+}
+
+function purgerSessions(s) { const m = Date.now(); for (const k of Object.keys(s)) if (s[k].fin < m) delete s[k]; return s; }
+/** Session invitée encore valable pour ce jeton, sinon null. */
+function sessionInvite(jeton) {
+  if (!/^[a-f0-9]{64}$/.test(String(jeton || ''))) return null;
+  const s = lireProp('INVITE_SESSIONS', {})[empreinte(jeton)];
+  return s && s.fin > Date.now() ? s : null;
+}
+/** Réglages › Arrêter les sessions invitées (avec la clé du magasin seulement). */
+function arreterInvites() {
+  const n = Object.keys(purgerSessions(lireProp('INVITE_SESSIONS', {}))).length;
+  props().deleteProperty('INVITE_SESSIONS'); props().deleteProperty('INVITE_DEMANDES');
+  return { ok: true, arretees: n };
+}
+
 // ---------------------------------------------------------------- installation et déclencheur
 
 function passage15min() {
   purgerClePrecedente();
+  try { const s = lireProp('INVITE_SESSIONS', null); if (s) ecrireProp('INVITE_SESSIONS', purgerSessions(s)); } catch (x) { }
   const verrou = LockService.getScriptLock();
   if (!verrou.tryLock(1000)) return;
   try { chercherFactures(); } finally { verrou.releaseLock(); }
@@ -395,6 +492,7 @@ function installer() {
   const p = props();
   if (!p.getProperty('CLE_APPLI')) throw new Error('Ajoute d\'abord la propriété CLE_APPLI (Paramètres du projet › Propriétés du script).');
   dossierFactures(); dossierExports(); dossierV2();
+  console.log('Adresse qui reçoit les codes invités : ' + mailAdmin());
   if (!p.getProperty('DEPUIS')) p.setProperty('DEPUIS', String(Date.now() - 7 * 864e5));
   const existe = ScriptApp.getProjectTriggers().some(t => t.getHandlerFunction() === 'passage15min');
   if (!existe) ScriptApp.newTrigger('passage15min').timeBased().everyMinutes(15).create();

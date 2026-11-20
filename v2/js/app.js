@@ -12,7 +12,9 @@ import { ouvrirVisionneuse } from './visionneuse.js';
 import { chargerFacture, actionFacture, brancherFacture, estEnCours, reprendreEnCours, retirerEnCours, restaurerEnCours } from './facture.js';
 import { ecranATraiter, choisirOnglet, nomFournisseur } from './atraiter.js';
 import { chargerLectures, chargerCache, lirePremieres } from './lectures.js';
-import { chargerConfig, estRelie, relier, delier, aTraiterEnCache, majATraiter, rafraichirMaintenant, marquerTraite, prendreExports, synchroniserListe, fichierFacture, testerScript } from './drive.js';
+import { chargerConfig, estRelie, relier, delier, aTraiterEnCache, majATraiter, rafraichirMaintenant, marquerTraite, prendreExports, synchroniserListe, fichierFacture, testerScript, estInvite, finInvite, nomInvite, estAdmin, urlDuLien, urlValide, demanderCode, validerCode, arreterInvites, lienInvitation, siInviteFini } from './drive.js';
+import { ecranAccueilInvite, ecranDemandeInvite, ecranInviteFini, blocInviter, resteInvite } from './invite.js';
+import { toutEffacer } from './donnees.js';
 
 const app = document.getElementById('app');
 const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
@@ -38,7 +40,7 @@ function afficher(html, nom = '') { ecranCourant = nom; document.querySelector('
 
 function resumeDonnees() {
   const n = Object.keys(etat.produits).length;
-  if (!n) return '<span class="fort" style="color:var(--alerte)">Aucun produit chargé.</span> Touche « Mettre à jour les ventes » pour commencer.';
+  if (!n) return estInvite() ? '<span class="fort" style="color:var(--alerte)">Produits pas encore chargés.</span> Vérifie le réseau.' : '<span class="fort" style="color:var(--alerte)">Aucun produit chargé.</span> Touche « Mettre à jour les ventes » pour commencer.';
   const v = etat.meta.ventes;
   const d = iso => iso ? new Date(iso).toLocaleDateString('fr-FR', { day: 'numeric', month: 'long' }) : '';
   const drive = estRelie() ? ` · Drive ${cacheAT.recu ? `vérifié à ${heure(cacheAT.recu)}` : 'relié'}` : '';
@@ -46,8 +48,18 @@ function resumeDonnees() {
 }
 
 // ---------- écrans ----------
-function accueil() {
+let urlInvitation = ''; // adresse /exec venue d'un lien d'invitation, en attente du code
+let demandeInvite = null; // { demande, minutes, nom }
+async function accueil() {
   courant = null;
+  if (estInvite()) { afficher(ecranAccueilInvite({ fin: finInvite(), nom: nomInvite(), donnees: resumeDonnees(), planche: (await lire('etiqSelection', [])).length }), 'accueil'); return; }
+  if (!estRelie() && urlInvitation) {
+    afficher(`<div class="scr cb"><div class="scr__corps"><h1 class="titre-1">Bonjour</h1>
+      <div class="note">Tu as reçu un lien d'invitation.</div>
+      <button class="tuile tuile--magasin" data-action="invite-ouvrir">${icone('magasin')}<div><b>Mode invité</b><span>Étiquettes pendant 6 heures, avec un code du responsable</span></div></button>
+      </div></div>`, 'accueil');
+    return;
+  }
   afficher(ecranAccueil({
     bonjour: 'Bonjour', date: dateDuJour(), aTraiter: nouveaux(), donnees: resumeDonnees(),
     petites: [['etiquettes', 'imprimer', 'Étiquettes'], ['factures', 'facture', 'Travailler une facture'], ['liste', 'achat', `Ma liste d'achat${etat.liste.length ? ` (${etat.liste.length})` : ''}`]],
@@ -191,6 +203,7 @@ function reglages() {
       <div class="titre-3">Liaison avec le Drive</div>
       ${estRelie() ? `<div class="bandeau" style="background:var(--succes-fond);color:var(--succes)">${icone('check', 'cb-ico cb-ico--24')}<span>Relié au Drive du magasin</span></div>
         <button class="btn btn--secondaire" data-action="tester-script" style="width:100%">Tester la connexion Apps Script</button><div data-msg-test></div>
+        </div>${blocInviter()}<div class="carte" style="display:grid;gap:12px">
         <button class="btn btn--secondaire" data-action="delier" style="width:100%">Délier cet appareil</button>`
       : `<div class="note">Adresse et clé fournies à l'installation du script. Elles restent sur cet appareil.</div>
         <label class="fort" for="drv-url">Adresse (finit par /exec)</label><input class="champ" id="drv-url" autocomplete="off" autocapitalize="off" spellcheck="false" style="font-size:18px">
@@ -252,7 +265,48 @@ app.addEventListener('click', async e => {
   if (/^at-/.test(a) || a === 'rafraichir' || a === 'traite' || a === 'a-traiter' || a === 'tester-script') console.log(`[V2/ATraiter] clic « ${a} »${b.dataset.id ? ' facture ' + b.dataset.id : ''}`);
   if (await actionEtiquettes(a, b, nav)) return;
   if (await actionFacture(a, b, nav)) return;
+  if (estInvite() && INTERDIT_INVITE.test(a)) { console.warn('[V2/Invité] action refusée :', a); return accueil(); }
   if (a === 'accueil') return accueil();
+  if (a === 'invite-ouvrir') { afficher(ecranDemandeInvite({ etape: 1, nom: await lire('inviteNom', '') }), 'invite'); return; }
+  if (a === 'invite-demander' || a === 'invite-renvoyer') {
+    const nom = a === 'invite-demander' ? (app.querySelector('#inv-nom')?.value || '').trim() : (demandeInvite?.nom || '');
+    if (!nom) { afficher(ecranDemandeInvite({ etape: 1, erreur: 'Écris ton prénom : le responsable saura qui demande.' }), 'invite'); return; }
+    await ecrire('inviteNom', nom);
+    b.disabled = true; b.textContent = 'Envoi du code…';
+    try { const r = await demanderCode(urlInvitation, nom); demandeInvite = { ...r, nom }; afficher(ecranDemandeInvite({ etape: 2, minutes: r.minutes, message: 'Code envoyé au responsable.' }), 'invite'); setTimeout(() => app.querySelector('#inv-code')?.focus(), 50); }
+    catch (x) { afficher(ecranDemandeInvite({ etape: demandeInvite ? 2 : 1, nom, erreur: `Pas de code envoyé : ${x.message}.` }), 'invite'); }
+    return;
+  }
+  if (a === 'invite-valider') {
+    const code = (app.querySelector('#inv-code')?.value || '').replace(/\D/g, '');
+    if (code.length !== 6) { afficher(ecranDemandeInvite({ etape: 2, minutes: demandeInvite?.minutes, erreur: 'Le code a 6 chiffres.' }), 'invite'); return; }
+    b.disabled = true; b.textContent = 'Vérification…';
+    try {
+      await validerCode(urlInvitation, demandeInvite?.demande, code);
+      urlInvitation = ''; demandeInvite = null; await ecrire('inviteUrl', '');
+      afficher(`<div class="scr cb"><div class="scr__corps" style="justify-content:center"><h1 class="titre-1">Bienvenue</h1><div class="carte"><div class="titre-2">Chargement des produits…</div><div class="note" style="margin-top:8px">Une minute au plus.</div></div></div></div>`, 'invite');
+      try { await prendreExports({ forcer: true }); } catch (x) { console.error('[V2/Invité] produits :', x.message); }
+      surveillerInvite(); accueil(); toast(`Session ouverte pour ${resteInvite(finInvite())}`);
+    } catch (x) { afficher(ecranDemandeInvite({ etape: 2, minutes: demandeInvite?.minutes, erreur: x.message.replace(/^./, c => c.toUpperCase()) + '.' }), 'invite'); }
+    return;
+  }
+  if (a === 'invite-quitter') { await terminerInvite(); return; }
+  if (a === 'invite-lien') {
+    const lien = lienInvitation(); if (!lien) return;
+    const zone = app.querySelector('[data-msg-invite]');
+    try {
+      if (typeof navigator.share === 'function') { await navigator.share({ title: 'Accès invité', text: 'Ouvre ce lien sur ton téléphone, puis touche « Mode invité ».', url: lien }); return; }
+    } catch (x) { if (x && x.name === 'AbortError') return; }
+    try { await navigator.clipboard.writeText(lien); zone.innerHTML = '<div class="note">Lien copié : colle-le dans un message.</div>'; }
+    catch (x) { zone.innerHTML = `<div class="note" style="word-break:break-all">${esc(lien)}</div>`; }
+    return;
+  }
+  if (a === 'invite-arreter') {
+    const zone = app.querySelector('[data-msg-invite]');
+    try { const n = await arreterInvites(); zone.innerHTML = `<div class="note">${n ? `${n} session(s) arrêtée(s).` : 'Aucune session en cours.'} Les téléphones invités s'effacent à leur prochain appel.</div>`; }
+    catch (x) { zone.innerHTML = `<div class="bandeau bandeau--erreur"><span>${esc(x.message)}</span></div>`; }
+    return;
+  }
   if (a === 'mode') { if (b.dataset.mode === 'inventaire') return pasEncore('inventaire'); return ouvrirMode(b.dataset.mode); }
   if (a === 'at-onglet') { choisirOnglet(b.dataset.o); aTraiter(); document.querySelector('.scr__corps').scrollTop = 0; return; }
   if (a === 'at-voir') {
@@ -362,6 +416,30 @@ brancherFacture(app, nav);
 
 ecouterDouchette(code => { if (!document.querySelector('.scan-plein')) resultat(code); });
 
+// ---------- mode invité : fin de session ----------
+// L'invité ne fait que des étiquettes : tout le reste est refusé (et le serveur ne lui donne que les produits).
+const INTERDIT_INVITE = /^(factures|fac-.*|a-traiter|at-.*|rafraichir|traite|reglages|fin-reglages|relier|delier|tester-script|donnees|exports-drive|reprendre-v1|mode|scanner|scanner-achat|liste|ouvrir-fiche|vider|retirer|invite-lien|invite-arreter)$/;
+let minuteurInvite = null;
+function surveillerInvite() {
+  clearInterval(minuteurInvite);
+  minuteurInvite = setInterval(() => {
+    if (!estInvite()) return clearInterval(minuteurInvite);
+    if (Date.now() >= finInvite()) return terminerInvite();
+    const z = document.querySelector('[data-reste]'); if (z) z.textContent = resteInvite(finInvite());
+  }, 20000);
+}
+/** Fin des 6 heures, session coupée par le responsable, ou « Quitter » : tout ce que le téléphone a reçu est effacé. */
+async function terminerInvite() {
+  clearInterval(minuteurInvite);
+  console.log('[V2/Invité] fin de session : effacement des données');
+  await toutEffacer();
+  await chargerConfig();
+  urlInvitation = '';
+  afficher(ecranInviteFini(), 'invite-fini');
+}
+siInviteFini(() => { if (estInvite()) terminerInvite(); });
+document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible' && estInvite() && Date.now() >= finInvite()) terminerInvite(); });
+
 // ---------- synchronisation en fond ----------
 let syncT = null, dernierSync = 0, syncEnCours = false;
 function planifierSync() { clearTimeout(syncT); syncT = setTimeout(() => syncFond(true), 3000); }
@@ -370,7 +448,7 @@ async function syncFond(force = false) {
   if (!force && Date.now() - dernierSync < 120000) return;
   syncEnCours = true; dernierSync = Date.now();
   try {
-    try { cacheAT = await majATraiter(); erreurAT = ''; } catch (x) { erreurAT = MSG_ERREUR_DRIVE; console.error('[V2/ATraiter] échec :', x.message); }
+    if (!estInvite()) { try { cacheAT = await majATraiter(); erreurAT = ''; } catch (x) { erreurAT = MSG_ERREUR_DRIVE; console.error('[V2/ATraiter] échec :', x.message); } }
     try {
       const faits = await prendreExports();
       if (faits.length) toast(`Mis à jour depuis le Drive : ${faits.map(r => r.type === 'ventes' ? 'ventes' : 'produits').join(' et ')}`);
@@ -390,6 +468,13 @@ document.addEventListener('visibilitychange', () => { if (document.visibilitySta
 (async () => {
   await charger();
   await chargerConfig();
+  // lien d'invitation (#invite=…) : gardé tant que le code n'est pas validé, puis retiré de l'adresse
+  const venue = urlDuLien();
+  if (venue && !estAdmin()) { urlInvitation = venue; await ecrire('inviteUrl', venue); }
+  else if (!estRelie()) { const u = await lire('inviteUrl', ''); if (urlValide(u)) urlInvitation = u; }
+  if (location.hash) history.replaceState(null, '', location.pathname + location.search);
+  if (estInvite() && finInvite() <= Date.now()) { await terminerInvite(); return; }
+  if (estInvite()) surveillerInvite();
   await chargerEtiquettes();
   await chargerFacture();
   await chargerLectures();

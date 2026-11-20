@@ -199,3 +199,6 @@ html,body{margin:0;background:var(--papier)}
 .btns-pdf{display:grid;gap:var(--espace-3);grid-template-columns:1fr}
 @media (min-width:600px){.btns-pdf{grid-template-columns:1fr 1fr}}
 .btns-pdf .btn{min-height:var(--cible-principale)}
+
+/* mode invité */
+.invite-bandeau{background:var(--achat-clair);color:var(--achat)}
