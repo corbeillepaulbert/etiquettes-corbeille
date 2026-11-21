@@ -24,7 +24,7 @@
  *  - Le secret n'apparaît jamais dans un journal ni dans une réponse.
  */
 
-const VERSION = 5;
+const VERSION = 6;
 const NOM_FACTURES = 'FACTURES ACHAT';
 const NOM_EXPORTS = 'EXPORTS STOREPOS';
 const NOM_APPLI = 'APPLI ETIQUETTES CORBEILLE';
@@ -34,6 +34,7 @@ const JOURS_CLE_PRECEDENTE = 7;
 const FENETRE_JOURS = 90;
 const JOURS_TRAITEES = 365; // les factures traitées restent consultables (archives) bien après les 90 jours
 const NOM_CACHE = 'FACTURES_CACHE';
+const FICHIER_INDEX_CACHE = 'factures-cache.json';
 const ID_VALIDE = /^[A-Za-z0-9_-]{10,80}$/;
 // Mode invité : une session de 6 h ouverte par un code à 6 chiffres envoyé au responsable.
 const DUREE_INVITE_MS = 6 * 3600e3;
@@ -166,17 +167,28 @@ function dossierCache() {
   return f;
 }
 
-function lireJson(nom, defaut) {
+/** Le fichier JSON « nom » de APPLI V2, toujours le même : son id est gardé dans les propriétés.
+ *  (S'il en existe deux du même nom, créés par deux appels simultanés, on prend le plus récent et on s'y tient :
+ *  avant ce correctif, lectures et écritures pouvaient tomber tantôt sur l'un, tantôt sur l'autre.) */
+function fichierJson(nom, creer) {
+  const cle = 'ID_JSON_' + nom, id = props().getProperty(cle);
+  if (id) { try { return DriveApp.getFileById(id); } catch (x) { props().deleteProperty(cle); } }
   const it = dossierV2().getFilesByName(nom);
-  if (!it.hasNext()) return defaut;
-  try { return JSON.parse(it.next().getBlob().getDataAsString('UTF-8')); } catch (x) { return defaut; }
+  let f = null;
+  while (it.hasNext()) { const g = it.next(); if (!f || g.getLastUpdated() > f.getLastUpdated()) f = g; }
+  if (!f && creer) f = dossierV2().createFile(nom, creer, 'application/json');
+  if (f) props().setProperty(cle, f.getId());
+  return f;
+}
+function lireJson(nom, defaut) {
+  const f = fichierJson(nom, null);
+  if (!f) return defaut;
+  try { return JSON.parse(f.getBlob().getDataAsString('UTF-8')); } catch (x) { return defaut; }
 }
 function ecrireJson(nom, valeur) {
-  const v2 = dossierV2();
-  const it = v2.getFilesByName(nom);
   const texte = JSON.stringify(valeur);
-  if (it.hasNext()) it.next().setContent(texte);
-  else v2.createFile(nom, texte, 'application/json');
+  const f = fichierJson(nom, texte);
+  if (f.getBlob().getDataAsString('UTF-8') !== texte) f.setContent(texte);
 }
 
 // ---------------------------------------------------------------- factures → À traiter
@@ -259,7 +271,7 @@ function rafraichir() {
 
 function marquer(id, etatVoulu, par) {
   const verrou = LockService.getScriptLock();
-  verrou.waitLock(20000);
+  verrou.waitLock(30000);
   try {
     const etat = lireJson(FICHIER_A_TRAITER, { derniere: null, elements: [] });
     const x = etat.elements.find(y => y.id === id);
@@ -318,17 +330,9 @@ function lireCacheFactures(ids) {
   if (!voulus.size) return {};
   const maj = {};
   lireJson(FICHIER_A_TRAITER, { elements: [] }).elements.forEach(x => { if (voulus.has(x.id)) maj[x.id] = x.maj; });
-  const out = {};
-  const it = dossierCache().getFiles();
-  while (it.hasNext()) {
-    const f = it.next(), nom = f.getName();
-    const id = nom.replace(/\.json$/, '');
-    if (!voulus.has(id) || !(id in maj)) continue;
-    try {
-      const v = JSON.parse(f.getBlob().getDataAsString('UTF-8'));
-      if (v.empreinte === maj[id]) out[id] = { fournisseur: v.fournisseur, montant: v.montant, nb: v.nb };
-    } catch (x) { }
-  }
+  // Lecture rapide : l'index factures-cache.json (une seule lecture) ; les fichiers FACTURES_CACHE/{id}.json restent la trace par facture.
+  const index = lireJson(FICHIER_INDEX_CACHE, {}), out = {};
+  for (const id of voulus) { const v = index[id]; if (v && id in maj && v.empreinte === maj[id]) out[id] = { fournisseur: v.fournisseur, montant: v.montant, nb: v.nb }; }
   return out;
 }
 
@@ -345,6 +349,8 @@ function ecrireCacheFacture(id, fournisseur, montant, nb) {
     nb: isFinite(n) ? Math.round(n) : null,
     ecrit: new Date().toISOString()
   };
+  const verrou = LockService.getScriptLock();
+  if (verrou.tryLock(10000)) { try { const index = lireJson(FICHIER_INDEX_CACHE, {}); index[id] = valeur; ecrireJson(FICHIER_INDEX_CACHE, index); } finally { verrou.releaseLock(); } }
   const dossierC = dossierCache(), texte = JSON.stringify(valeur);
   const it = dossierC.getFilesByName(id + '.json');
   if (it.hasNext()) it.next().setContent(texte); else dossierC.createFile(id + '.json', texte, 'application/json');
@@ -353,11 +359,25 @@ function ecrireCacheFacture(id, fournisseur, montant, nb) {
 
 /** Contenu d'une facture de FACTURES ACHAT (lecture seule : getBlob). Un identifiant hors de ce dossier est refusé. */
 function lireFacture(id) {
-  let trouve = null;
-  parcourirFactures(f => { if (f.getId() === id) { trouve = f; return false; } return true; });
-  if (!trouve) throw new Error('facture non autorisée');
-  if (trouve.getSize() > 20 * 1024 * 1024) throw new Error('fichier trop gros');
-  return { nom: trouve.getName(), type: trouve.getMimeType(), base64: Utilities.base64Encode(trouve.getBlob().getBytes()) };
+  // Accès direct par l'identifiant (lecture seule), puis contrôle que le fichier est bien rangé sous FACTURES ACHAT.
+  // Avant : parcours de tout le dossier à chaque ouverture (30 secondes et plus).
+  if (!ID_VALIDE.test(String(id || ''))) throw new Error('facture non autorisée');
+  let f = null;
+  try { f = DriveApp.getFileById(id); } catch (x) { throw new Error('facture non autorisée'); }
+  if (!dansFactures(f)) throw new Error('facture non autorisée');
+  if (f.getSize() > 20 * 1024 * 1024) throw new Error('fichier trop gros');
+  return { nom: f.getName(), type: f.getMimeType(), base64: Utilities.base64Encode(f.getBlob().getBytes()) };
+}
+/** Le fichier est-il sous FACTURES ACHAT (6 niveaux au plus) ? getParents est une lecture. */
+function dansFactures(f) {
+  const racine = dossierFactures().getId();
+  let niveau = [f];
+  for (let i = 0; i < 6 && niveau.length; i++) {
+    const suivant = [];
+    for (const x of niveau) { const it = x.getParents(); while (it.hasNext()) { const d = it.next(); if (d.getId() === racine) return true; suivant.push(d); } }
+    niveau = suivant;
+  }
+  return false;
 }
 
 // ---------------------------------------------------------------- exports StorePOS (lecture seule)
@@ -394,7 +414,7 @@ function lireDoc(doc) {
 /** Écriture avec contrôle de version : si un autre appareil a écrit entre-temps, on refuse et l'appli fusionne. */
 function ecrireDoc(doc, valeur, version) {
   const verrou = LockService.getScriptLock();
-  verrou.waitLock(20000);
+  verrou.waitLock(30000);
   try {
     const nom = nomDoc(doc);
     const d = lireJson(nom, { version: 0, valeur: null, maj: null });
@@ -418,7 +438,7 @@ function mailAdmin() { return props().getProperty('MAIL_ADMIN') || Session.getEf
 /** Un invité demande l'accès : un code à 6 chiffres part par e-mail au responsable. Le code n'est jamais renvoyé à l'appli. */
 function inviteDemande(nom) {
   const verrou = LockService.getScriptLock();
-  verrou.waitLock(20000);
+  verrou.waitLock(30000);
   try {
     const maintenant = Date.now();
     const journal = lireProp('INVITE_JOURNAL', []).filter(t => maintenant - t < 3600e3);
@@ -443,7 +463,7 @@ function inviteDemande(nom) {
 /** L'invité tape le code : s'il est bon, il reçoit un jeton valable 6 h. 5 essais au plus par code. */
 function inviteValider(id, code) {
   const verrou = LockService.getScriptLock();
-  verrou.waitLock(20000);
+  verrou.waitLock(30000);
   try {
     const demandes = lireProp('INVITE_DEMANDES', {});
     const d = demandes[String(id || '')];

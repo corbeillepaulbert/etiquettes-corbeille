@@ -1,6 +1,6 @@
 # Corbeille V2 (PILOT) — feuille de route
 
-Mise à jour du 20/11/2026. Chaque lot s'utilise seul ; la V1 reste en production tant que la V2 ne la remplace pas.
+Mise à jour du 21/11/2026. Chaque lot s'utilise seul ; la V1 reste en production tant que la V2 ne la remplace pas.
 
 ## Fait
 
@@ -15,12 +15,31 @@ Mise à jour du 20/11/2026. Chaque lot s'utilise seul ; la V1 reste en productio
 | 5 | Produits inconnus (file partagée, OpenFoodFacts, création de fiche mode 3) et mode caisse avec PIN | #12 |
 | 6 | Conseil d'achat par fournisseur ; exports datés demandés avec leurs dates exactes | #13 |
 | 8 | Mode Ramadan : Ramadan à Ramadan depuis 2023, tendance, dates limites, tuile à J-30 | #15 |
+| — | Correctifs de la fiche de tests du 21/11 : prix unitaires Metro (lots, prix au kilo, cartons), À traiter plus rapide (script v6), « Traitée » qui ne disparaît plus, zoom aux doigts, étiquettes au doigt, tuile Fruits et légumes, factures Agrifresh dans les affiches | #16 |
 
 ## À tester sur l'iPhone (avant toute suite)
 
 - Les lots 2b, 5, 6 et 8 n'ont été testés que dans Chrome avec un faux Drive.
 - Exports à déposer dans EXPORTS STOREPOS, dates dans le nom du fichier : Vente PLU de chaque Ramadan (23/03 → 20/04/2023, 11/03 → 09/04/2024, 01/03 → 29/03/2025, 18/02 → 19/03/2026) et des 4 et 8 dernières semaines.
 - Conseil d'achat : deux choix par défaut à confirmer (usage chez soi la veille comme sur place ; « À ne pas prendre » = aucune vente sur 8 semaines ou baisse de plus de 70 %).
+
+## Trois modes (décision du 21/11/2026)
+
+| Mode | Pour qui | Ce qu'il ouvre |
+| --- | --- | --- |
+| **Gérant** | le responsable, avec la clé du magasin | tout : factures, À traiter, achats, Ramadan, imports StorePOS, réglages |
+| **Caisse** | l'appareil posé à la caisse, caissiers identifiés par PIN | scan → nom et prix ; produit inconnu → signalé ; sortie avec le PIN du responsable (fait, lot 5) |
+| **Invité** | une personne venue aider, session de 6 h ouverte par un code envoyé au responsable | les étiquettes (fait) et **l'inventaire connecté** (lot 7) ; jamais les prix d'achat, les factures ni les réglages |
+
+## Lot 7 — Inventaire connecté (mode invité)
+
+- **Le jour J** : le responsable ouvre une session d'inventaire ; il envoie le lien d'invitation à tous les inventoristes, chacun entre son prénom et le code. Tout le monde compte en même temps, chacun sur son téléphone.
+- **Compter** : on choisit sa zone (rayon), on scanne, on tape la quantité. Chaque comptage est une ligne à part (qui, quand, zone, produit, quantité) : un produit peut être compté deux fois (deux rayons, deux personnes) sans rien écraser. Hors ligne, les comptages attendent sur le téléphone et partent dès le retour du réseau.
+- **Corriger** : un inventoriste voit les comptages des autres sur sa zone et peut en corriger un ; la correction est une nouvelle ligne qui remplace la précédente, avec son nom. L'historique reste visible pour le responsable.
+- **Écarts** : le responsable voit en direct l'avancement par zone, les produits comptés deux fois avec des quantités différentes, et ceux qui ne sont pas encore comptés ; il tranche d'un geste.
+- **Clôture** : le responsable valide ; l'appli fabrique le fichier de comptage (code-barres | quantité, même format que la V1) pour StorePOS. Les sessions invitées s'arrêtent.
+- **Technique** : comptages envoyés par petits paquets dans le Drive (APPLI V2), fusion sans perte (une ligne par comptage, jamais un total écrasé) ; Apps Script tient la charge (20 000 appels par jour, verrou par écriture). À tester avec 5 téléphones avant le jour J.
+- **Prérequis** : le mode invité gagne un second usage (« Inventaire ») choisi par le responsable au moment d'inviter ; le fichier de comptage de la V1 reste la référence jusqu'à ce que celui-ci soit validé.
 
 ## Reste à faire, dans l'ordre
 
@@ -33,7 +52,7 @@ Mise à jour du 20/11/2026. Chaque lot s'utilise seul ; la V1 reste en productio
 | 3 (fin) | Réception : factures des grossistes en libre-service (Metro, Promocash) reconnues | à faire |
 | 4 | Fichier d'import StorePOS complet (modes 1/2/3 pour toutes les fiches, pas seulement les inconnus) | à faire |
 | — | PILOT dans l'appli : nom, icône, couleur indigo (si validé) | à décider |
-| 7 | Inventaire (après le gros inventaire physique) | pas avant |
+| 7 | **Inventaire connecté en mode invité** (voir plus haut) | à faire, avant le gros inventaire physique |
 | — | Bascule : la V2 remplace la V1 à la racine, copie de la V1 gardée quelques semaines | après les tests iPhone |
 
 Idée de la maquette non retenue pour l'instant : dates courtes (alerte 10 jours avant la date limite).

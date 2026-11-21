@@ -32,7 +32,7 @@ export async function chargerCache(elements) {
 }
 
 /** Première lecture des factures qui n'ont pas encore de cache : PDF avec texte seulement (une photo ou un scan se lit à l'ouverture). */
-export async function lirePremieres(elements, { max = 4, quandFini = () => { }, encore = () => true } = {}) {
+export async function lirePremieres(elements, { max = 2, quandFini = () => { }, encore = () => true } = {}) {
   if (enCours) return; enCours = true;
   try {
     const a = elements.filter(x => x.etat === 'nouveau' && !L[x.id] && !essayes.has(x.id) && /\.pdf$/i.test(x.nom)).slice(0, max);
