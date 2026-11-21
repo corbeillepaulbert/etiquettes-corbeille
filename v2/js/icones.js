@@ -1,6 +1,7 @@
 // Icônes : tracés au style Lucide (https://lucide.dev, licence ISC), trait de 2 px.
 const P = {
   check: '<path d="M20 6 9 17l-5-5"/>',
+  fruit: '<path d="M12 7c-2.5-1.6-7-1-7 4.5 0 4.2 2.8 9.5 5.2 9.5 1 0 1.3-.6 1.8-.6s.8.6 1.8.6c2.4 0 5.2-5.3 5.2-9.5C19 6 14.5 5.4 12 7z"/><path d="M12 7c0-2 .8-3.6 2.5-4.5"/><path d="M12.5 5.5c1.5-1.8 3.8-1.7 4.5-1.2-.4 1.6-2.4 2.6-4.5 1.2z"/>',
   x: '<path d="M18 6 6 18M6 6l12 12"/>',
   scan: '<path d="M3 7V5a2 2 0 0 1 2-2h2M17 3h2a2 2 0 0 1 2 2v2M21 17v2a2 2 0 0 1-2 2h-2M7 21H5a2 2 0 0 1-2-2v-2M8 7v10M12 7v10M17 7v10"/>',
   magasin: '<path d="M3 9.5 4.6 4h14.8L21 9.5"/><path d="M4 9.5V20h16V9.5"/><path d="M3 9.5h18M9.5 20v-6h5v6"/>',

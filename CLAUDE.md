@@ -41,8 +41,8 @@ Appli de La Corbeille Paul Bert. Deux versions cohabitent sur le même site GitH
 
 ### Dossier FACTURES ACHAT : lecture seule absolue
 - Le script **lit** FACTURES ACHAT et ses sous-dossiers : il **ne déplace rien, ne renomme rien, ne supprime rien, n'écrit rien** dans ce dossier.
-- Appels autorisés sur ce dossier et son contenu : `getFolderById`, `getFoldersByName`, `getFolders`, `getFiles`, `searchFiles`, `getName`, `getId`, `getDateCreated`, `getLastUpdated`, `getMimeType`, `getSize`, `getBlob`.
-- Lecture d'une facture à la demande (actions `factures` et `facture`) : parcours par `getFolders`/`getFiles`, contenu par `getBlob`, rien d'autre. Un identifiant hors de FACTURES ACHAT est refusé.
+- Appels autorisés sur ce dossier et son contenu : `getFolderById`, `getFoldersByName`, `getFolders`, `getFiles`, `searchFiles`, `getName`, `getId`, `getDateCreated`, `getLastUpdated`, `getMimeType`, `getSize`, `getBlob`, et depuis la version 6 `DriveApp.getFileById` + `getParents` (lectures pures : ouvrir une facture par son identifiant et vérifier qu'elle est bien sous FACTURES ACHAT, au lieu de parcourir tout le dossier, qui prenait 30 s et plus).
+- Lecture d'une facture à la demande (actions `factures` et `facture`) : liste par `getFolders`/`getFiles` ; ouverture par `getFileById`, contrôle des parents (`getParents`) jusqu'à FACTURES ACHAT, contenu par `getBlob`, rien d'autre. Un identifiant hors de FACTURES ACHAT est refusé.
 - Même règle pour EXPORTS STOREPOS : le script n'y fait que lister et lire les fichiers posés directement dans le dossier (pas ANCIENS).
 - Appels interdits : `moveTo`, `setName`, `setTrashed`, `createFile`, `createFolder`, `addFile`, `removeFile`, `setDescription`, `setSharing`, `setStarred`, et toute écriture équivalente via l'API Drive avancée.
 - Les données de la V2 vivent dans un dossier à part, `APPLI V2`. Dext et l'expert-comptable continuent sans intervention.
@@ -58,7 +58,11 @@ Appli de La Corbeille Paul Bert. Deux versions cohabitent sur le même site GitH
 - Source : `apps-script/Code.gs` (sans aucun secret ni identifiant de dossier). Installation décrite en tête du fichier.
 - Écritures du script : uniquement `createFolder` (APPLI V2 et son sous-dossier FACTURES_CACHE, une fois chacun), `createFile` et `setContent` sur les fichiers JSON de APPLI V2 (dont `FACTURES_CACHE/{idFacture}.json`).
 - Cache de lecture des factures : le script ne sait pas lire un PDF sans écrire dans le Drive (OCR de l'API Drive avancée = écriture interdite). C'est donc l'appli qui lit la facture (règles V1) et envoie fournisseur / montant / nombre de produits (`cacheEcrire`) ; le script les garde avec, pour empreinte, la date de modification du PDF, et ne les rend (`cacheLire`) que si elle n'a pas changé.
-- Version du script : `ping` renvoie `version`. L'appli exige la version 4 ou plus (version 5 pour le mode invité, qui demande d'exécuter `installer()` une fois pour autoriser l'envoi d'e-mails) (Réglages → « Tester la connexion Apps Script »).
+- Version du script : `ping` renvoie `version`. L'appli exige la version 4 ou plus (version 5 pour le mode invité, qui demande d'exécuter `installer()` une fois pour autoriser l'envoi d'e-mails ; version 6 : factures ouvertes par identifiant, un seul fichier par document JSON, index du cache) (Réglages → « Tester la connexion Apps Script »).
+
+## Prix d'achat lus sur les factures
+
+- Le moteur de lecture (`v2/js/moteur/facture.js`, repris de la V1) n'est pas modifié. Les corrections passent après lui, dans `v2/js/prix-unitaire.js` : prix d'un lot divisé par sa taille (« X 12 »), prix au kilo écrit sous la ligne Metro pour les fruits et légumes, codes de carton à 14 chiffres ramenés à l'EAN-13 du produit. Entre plusieurs prix possibles, on garde celui qui est le plus proche du prix d'achat StorePOS ; la ligne dit lequel a été pris.
 
 ## Code de la V2
 

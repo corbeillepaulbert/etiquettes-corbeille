@@ -8,12 +8,14 @@ import { buildPdf } from './moteur/etiquettes.js';
 import { ouvrirScanner } from './moteur/scan.js';
 import { noterInconnu } from './inconnus.js';
 import { telecharger } from './livrer.js';
+import { estRelie, facturesDrive, fichierFacture } from './drive.js';
+import { lireFactureFichier } from './facture.js';
 
 const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 const estFL = o => /FRUIT|LEG/i.test(o.dep || ''); // même règle que la V1
 const FORMATS = [['land', 'A4 paysage', '1 produit par page'], ['list', 'A4 liste', '7 produits par page'], ['a6', 'A6 × 4', 'à piquer dans les cagettes'], ['caisse', 'Fiche de caisse', 'codes à flasher, 12 par page']];
 const UNITES = ['le kg', 'la pièce', 'la botte', 'la barquette', 'le sac', 'les 3'];
-const F = { codes: [], fmt: 'land', reg: {}, pdf: null, page: 0 };
+const F = { codes: [], fmt: 'land', reg: {}, pdf: null, page: 0, hist: {} };
 let CACHE = { cle: '', pages: null };
 
 function lireV1(cle, defaut) { try { const v = localStorage.getItem(cle); return v ? JSON.parse(v) : defaut; } catch (e) { return defaut; } }
@@ -21,12 +23,12 @@ function lireV1(cle, defaut) { try { const v = localStorage.getItem(cle); return
 function ctx() {
   const v1 = lireV1('cpb_fl', {}), s = {};
   for (const e of new Set([...Object.keys(v1), ...Object.keys(F.reg)])) s[e] = { ...(v1[e] || {}), ...(F.reg[e] || {}) };
-  configurer({ SETF: s, HIST: lireV1('cpb_hist', {}) });
+  configurer({ SETF: s, HIST: { ...lireV1('cpb_hist', {}), ...F.hist } });
 }
 export async function chargerAffiches() {
-  F.codes = await lire('flSelection', []); F.fmt = await lire('flFormat', 'land'); F.reg = await lire('flReglages', {});
+  F.codes = await lire('flSelection', []); F.fmt = await lire('flFormat', 'land'); F.reg = await lire('flReglages', {}); F.hist = await lire('flHist', {});
 }
-async function sauver() { await ecrire('flSelection', F.codes); await ecrire('flFormat', F.fmt); await ecrire('flReglages', F.reg); }
+async function sauver() { await ecrire('flSelection', F.codes); await ecrire('flFormat', F.fmt); await ecrire('flReglages', F.reg); await ecrire('flHist', F.hist); }
 const liste = () => F.codes.map(e => etat.produits[e]).filter(Boolean);
 
 function ajouter(code) {
@@ -82,6 +84,7 @@ export function ecranAffiches(nav, message = '') {
       <div class="accueil__haut"><h2 class="titre-3">Produits (${l.length})</h2><button class="btn btn--discret" data-action="af-vider">Tout retirer</button></div>
       ${l.map(ligne).join('')}`
       : `<div class="carte"><div class="titre-2">Aucun produit.</div><div class="note" style="margin-top:8px">Scanne les fruits et légumes, cherche-les par leur nom, ou prends tous ceux de saison.</div></div>`}
+    ${estRelie() ? `<button class="btn btn--secondaire" data-action="af-agrifresh">${icone('facture', 'cb-ico cb-ico--24')}Depuis une facture Agrifresh</button>` : ''}
     <button class="btn btn--secondaire" data-action="af-saison">Ajouter les fruits et légumes de saison</button>
     <div><label class="fort" for="af-q">Ajouter par le nom</label>
       <input class="champ" id="af-q" placeholder="ex. tomate" autocomplete="off" style="font-size:18px;margin-top:8px"></div>
@@ -157,6 +160,37 @@ export async function actionAffiches(a, b, nav) {
     const l = Object.values(etat.produits).filter(o => estFL(o) && enSaison(o));
     F.codes = [...new Set([...F.codes, ...l.map(o => o.e)])]; F.pdf = null; await sauver(); ecranAffiches(nav);
     nav.toast(`${F.codes.length - avant.length} produit(s) de saison ajouté(s)`, async () => { F.codes = avant; F.fmt = fmtAvant; await sauver(); ecranAffiches(nav); });
+    return true;
+  }
+  if (a === 'af-agrifresh') {
+    nav.afficher(`<div class="scr cb">${barreMode('magasin', 'Affiches', true)}<div class="scr__corps"><h1 class="titre-1">Factures Agrifresh</h1><div class="carte"><div class="note">Je cherche les dernières factures dans le Drive…</div></div></div></div>`, 'affiches');
+    try {
+      const L = (await facturesDrive('AGRIFRESH', 12, 45)).filter(f => /AGRIFRESH/i.test(f.nom + ' ' + (f.dossier || '')));
+      const jour = d => d ? new Date(d + 'T12:00').toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long' }) : '';
+      nav.afficher(`<div class="scr cb">${barreMode('magasin', 'Affiches', true)}<div class="scr__corps"><h1 class="titre-1">Factures Agrifresh</h1>
+        <div class="note">Touche une facture : ses fruits et légumes vont sur les affiches, avec leur origine. Les prix restent ceux de StorePOS.</div>
+        ${L.length ? L.map(f => `<button class="ligne" data-action="af-lire" data-id="${esc(f.id)}" data-date="${esc(f.date || '')}" style="border:0;font:inherit;text-align:left;width:100%"><div class="ligne__ico">${icone('facture')}</div><div class="ligne__txt"><div class="ligne__titre">${esc(jour(f.date))}</div><div class="ligne__detail">Agrifresh</div></div>${icone('chevron', 'cb-ico cb-ico--24')}</button>`).join('') : '<div class="carte"><div class="note">Aucune facture Agrifresh sur 45 jours.</div></div>'}
+        </div><div class="scr__bas"><button class="btn btn--discret" data-action="affiches">Retour</button></div></div>`, 'affiches');
+    } catch (x) { ecranAffiches(nav, `Drive : ${esc(x.message)}.`); }
+    return true;
+  }
+  if (a === 'af-lire') {
+    nav.afficher(`<div class="scr cb">${barreMode('magasin', 'Affiches', true)}<div class="scr__corps"><h1 class="titre-1">Lecture de la facture</h1><div class="carte"><div class="note">Un instant…</div></div></div></div>`, 'affiches');
+    try {
+      const r = await lireFactureFichier(await fichierFacture(b.dataset.id));
+      const avant = { codes: F.codes.slice(), reg: JSON.parse(JSON.stringify(F.reg)), hist: { ...F.hist } };
+      const date = r.date || b.dataset.date || new Date().toISOString().slice(0, 10);
+      let n = 0, sans = 0;
+      for (const x of r.lines) {
+        if (x.ill && (!F.hist[x.ill] || F.hist[x.ill] < date)) F.hist[x.ill] = date; // acheté : il est de saison
+        const o = x.e && etat.produits[x.e];
+        if (!o || !estFL(o)) { if (x.fl !== false) sans++; continue; }
+        if (!F.codes.includes(o.e)) { F.codes.push(o.e); n++; }
+        if (x.ori && !(F.reg[o.e] && F.reg[o.e].ori)) F.reg[o.e] = { ...(F.reg[o.e] || {}), ori: x.ori };
+      }
+      F.pdf = null; await sauver(); ecranAffiches(nav, sans ? `${sans} ligne(s) de la facture sans fiche en caisse : traite-la dans « Travailler une facture » pour les créer.` : '');
+      nav.toast(`${n} produit(s) ajouté(s) depuis la facture`, async () => { F.codes = avant.codes; F.reg = avant.reg; F.hist = avant.hist; await sauver(); ecranAffiches(nav); });
+    } catch (x) { ecranAffiches(nav, `Lecture impossible : ${esc(x.message)}.`); }
     return true;
   }
   if (a === 'af-vider') {

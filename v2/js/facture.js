@@ -12,6 +12,7 @@ import { icone } from './icones.js';
 import { barreMode, joli } from './ecrans.js';
 import * as F from './moteur/facture.js';
 import { texteDeFichier } from './moteur/lecture.js';
+import { corrigerPrix, choisirPrix } from './prix-unitaire.js';
 
 const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 const eur = n => n == null ? '–' : F.fmt(n) + ' €';
@@ -307,7 +308,7 @@ export async function actionFacture(a, b, nav) {
   }
   if (a === 'fac-choisir') {
     const x = FAC.lignes[+b.dataset.i], o = etat.produits[b.dataset.e];
-    if (o) { x.e = o.e; x.how = 'manuel'; x.fl = F.isFL(o) && FAC.sup === 'AGRIFRESH'; if (x.fl) x.ill = F.autoIll(o.lib); F.repricer(x, FAC.sup); x.act = x.act || {}; x.act.lab = true; if (FAC.sup === 'AGRIFRESH' && x.fl) x.act.pa = true; defauts(x); x.ok = false; await garder(); }
+    if (o) { x.e = o.e; x.how = 'manuel'; choisirPrix(x, o); x.fl = F.isFL(o) && FAC.sup === 'AGRIFRESH'; if (x.fl) x.ill = F.autoIll(o.lib); F.repricer(x, FAC.sup); x.act = x.act || {}; x.act.lab = true; if (FAC.sup === 'AGRIFRESH' && x.fl) x.act.pa = true; defauts(x); x.ok = false; await garder(); }
     rendre(); return true;
   }
   if (a === 'fac-valider') {
@@ -379,6 +380,15 @@ export async function actionFacture(a, b, nav) {
   return false;
 }
 
+/** Lit une facture (PDF ou photo) sans l'ouvrir dans l'écran Facture : pour les affiches fruits et légumes. */
+export async function lireFactureFichier(file, progres) {
+  preparerMoteur();
+  const texte = await texteDeFichier(file, progres);
+  const r = F.parseInvoice(texte, null);
+  corrigerPrix(texte, r, etat.produits);
+  return r;
+}
+
 async function lireEtMontrer(file, nav, source, driveId = '', dateFacture = '') {
   preparerMoteur();
   nav.afficher(ecranLecture('Lecture du texte de la facture…'), 'facture-lecture');
@@ -386,6 +396,7 @@ async function lireEtMontrer(file, nav, source, driveId = '', dateFacture = '') 
   const texte = await texteDeFichier(file, maj);
   const r = F.parseInvoice(texte, null);
   if (!r.lines.length) throw new Error('aucune ligne reconnue (essaie le PDF, ou une photo plus nette)');
+  corrigerPrix(texte, r, etat.produits);
   FAC = { sup: r.sup, date: r.date, nom: file.name, source, driveId, lignes: r.lines, lue: new Date().toISOString() };
   FAC.lignes.forEach(defauts);
   filtre = 'toutes';

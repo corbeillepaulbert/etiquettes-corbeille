@@ -26,11 +26,22 @@ let quandInviteFini = null;
 export function siInviteFini(fn) { quandInviteFini = fn; }
 const ACTIONS_AT = new Set(['aTraiter', 'rafraichir', 'traiter', 'facture', 'cacheLire', 'cacheEcrire', 'ping']);
 export const VERSION_SCRIPT_MIN = 4; // version de Code.gs attendue par cette appli
+const RELECTURE = new Set(['ping', 'aTraiter', 'exports', 'fichier', 'facture', 'factures', 'cacheLire', 'lire']);
+/** Appel au script ; une lecture qui échoue (réseau, délai) est retentée une fois avant d'abandonner. */
 export async function appel(action, donnees = {}, cfg = config) {
+  try { return await appel1(action, donnees, cfg); }
+  catch (x) {
+    if (!RELECTURE.has(action) || !navigator.onLine) throw x;
+    console.warn(`[V2/Drive] « ${action} » : nouvel essai (${x.message})`);
+    await new Promise(r => setTimeout(r, 1500));
+    return appel1(action, donnees, cfg);
+  }
+}
+async function appel1(action, donnees = {}, cfg = config) {
   if (!cfg) throw new Error('pas relié au Drive');
   const log = ACTIONS_AT.has(action);
   if (log) console.log(`[V2/ATraiter] appel « ${action} »`);
-  const ctl = new AbortController(); const t = setTimeout(() => ctl.abort(), 45000);
+  const ctl = new AbortController(); const t = setTimeout(() => ctl.abort(), 60000);
   try {
     const r = await fetch(cfg.url, {
       method: 'POST', redirect: 'follow', signal: ctl.signal,
@@ -52,16 +63,40 @@ export async function appel(action, donnees = {}, cfg = config) {
 
 // ---------- À traiter ----------
 export async function aTraiterEnCache() { return lire('aTraiter', { derniere: null, elements: [] }); }
+// Factures marquées « traitée » (ou remises) sur cet appareil et pas encore enregistrées dans le Drive : elles restent comme le gérant les a laissées.
+let ATTENTE = null;
+async function attente() { if (!ATTENTE) ATTENTE = await lire('marquesEnAttente', {}); return ATTENTE; }
+function superposer(elements, A) {
+  return elements.map(x => A[x.id] ? { ...x, etat: A[x.id].etat, traiteLe: A[x.id].etat === 'traite' ? A[x.id].t : null, traitePar: A[x.id].par || x.traitePar } : x);
+}
 async function garder(r) {
-  const v = { derniere: r.derniere, elements: r.elements || [], recu: new Date().toISOString() };
+  const A = await attente();
+  // une marque est confirmée quand le Drive renvoie le même état
+  for (const x of r.elements || []) if (A[x.id] && A[x.id].etat === x.etat) delete A[x.id];
+  await ecrire('marquesEnAttente', A);
+  const v = { derniere: r.derniere, elements: superposer(r.elements || [], A), recu: new Date().toISOString() };
   console.log(`[V2/ATraiter] reçu : ${v.elements.length} élément(s), dernier passage ${v.derniere || 'jamais'}`);
   await ecrire('aTraiter', v); return v;
 }
 export async function majATraiter() { const r = await appel('aTraiter'); if (!r.ok) throw new Error('refusé'); return garder(r); }
 export async function rafraichirMaintenant() { const r = await appel('rafraichir'); if (!r.ok) throw new Error('refusé'); const v = await garder(r); v.occupe = r.occupe; v.ajoutes = r.ajoutes; return v; }
+/** Marquer « traitée » : l'écran change tout de suite ; l'envoi au Drive suit, et sera refait plus tard s'il échoue. */
 export async function marquerTraite(id, traite, par) {
-  const r = await appel('traiter', { id, etat: traite ? 'traite' : 'nouveau', par });
-  if (!r.ok) throw new Error('refusé'); return garder(r);
+  const A = await attente();
+  A[id] = { etat: traite ? 'traite' : 'nouveau', par: par || '', t: new Date().toISOString() };
+  await ecrire('marquesEnAttente', A);
+  const local = await aTraiterEnCache();
+  const v = { ...local, elements: superposer(local.elements || [], A) };
+  await ecrire('aTraiter', v);
+  try { const r = await appel('traiter', { id, etat: A[id].etat, par }); if (r.ok) return garder(r); }
+  catch (x) { console.error('[V2/ATraiter] marque pas encore envoyée :', x.message); }
+  return v;
+}
+/** Renvoie au Drive les marques restées sur l'appareil. */
+export async function envoyerMarques() {
+  const A = await attente(); let r = null;
+  for (const [id, m] of Object.entries(A)) { try { const x = await appel('traiter', { id, etat: m.etat, par: m.par }); if (x.ok) r = x; } catch (e) { return null; } }
+  return r ? garder(r) : null;
 }
 
 /** Test de la liaison (Réglages) : le script répond-il, et est-il assez récent ? */
@@ -70,6 +105,7 @@ export async function testerScript() {
     const r = await appel('ping');
     if (!r || !r.ok) return { ok: false, message: 'Le script ne répond pas ou ne connaît pas l\'action ping. Recopie Code.gs et redéploie (Nouvelle version).' };
     const v = Number(r.version) || 0;
+    if (v >= VERSION_SCRIPT_MIN && v < 6) return { ok: true, version: v, message: `Le script répond (version ${v}). La version 6 ouvre les factures bien plus vite : recopie Code.gs et redéploie (Nouvelle version).` };
     if (v < VERSION_SCRIPT_MIN) return { ok: false, version: v, message: `Le script répond mais il est ancien (version ${v}, il faut la ${VERSION_SCRIPT_MIN}). Recopie Code.gs et redéploie (Nouvelle version).` };
     return { ok: true, version: v, message: `Le script répond (version ${v}).` };
   } catch (x) {
@@ -171,8 +207,12 @@ export async function facturesDrive(mot = '', max = 150, jours = 90) {
   return r.factures;
 }
 /** Le fichier d'une facture, lu sans rien modifier dans le Drive. */
+const FICHIERS = new Map(); // id -> File : « Voir la facture » puis « Traiter » ne téléchargent qu'une fois
 export async function fichierFacture(id) {
+  if (FICHIERS.has(id)) return FICHIERS.get(id);
   const c = await appel('facture', { id }); if (!c.ok) throw new Error(c.erreur || 'facture refusée');
   const octets = Uint8Array.from(atob(c.base64), ch => ch.charCodeAt(0));
-  return new File([octets], c.nom, { type: c.type });
+  const f = new File([octets], c.nom, { type: c.type });
+  FICHIERS.set(id, f); if (FICHIERS.size > 8) FICHIERS.delete(FICHIERS.keys().next().value);
+  return f;
 }

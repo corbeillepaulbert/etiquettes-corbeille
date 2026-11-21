@@ -17,7 +17,7 @@ import { chargerCaisse, actionCaisse, modeCaisse, ecranCaisse, blocCaisse, inter
 import { chargerFacture, actionFacture, brancherFacture, estEnCours, reprendreEnCours, retirerEnCours, restaurerEnCours } from './facture.js';
 import { ecranATraiter, choisirOnglet, nomFournisseur } from './atraiter.js';
 import { chargerLectures, chargerCache, lirePremieres } from './lectures.js';
-import { chargerConfig, estRelie, relier, delier, aTraiterEnCache, majATraiter, rafraichirMaintenant, marquerTraite, prendreExports, synchroniserListe, fichierFacture, testerScript, estInvite, finInvite, nomInvite, estAdmin, urlDuLien, urlValide, demanderCode, validerCode, arreterInvites, lienInvitation, siInviteFini } from './drive.js';
+import { chargerConfig, estRelie, relier, delier, aTraiterEnCache, majATraiter, rafraichirMaintenant, marquerTraite, prendreExports, synchroniserListe, fichierFacture, testerScript, envoyerMarques, estInvite, finInvite, nomInvite, estAdmin, urlDuLien, urlValide, demanderCode, validerCode, arreterInvites, lienInvitation, siInviteFini } from './drive.js';
 import { ecranAccueilInvite, ecranDemandeInvite, ecranInviteFini, blocInviter, resteInvite } from './invite.js';
 import { toutEffacer } from './donnees.js';
 
@@ -70,9 +70,9 @@ async function accueil() {
   }
   const ram = await tuileRamadan();
   afficher(ecranAccueil({
-    extra: ram,
+    extra: `<button class="tuile tuile--fl" data-action="affiches">${icone('fruit')}<div><b>Fruits et légumes</b><span>Affiches et fiche de caisse</span></div></button>` + ram,
     bonjour: 'Bonjour', date: dateDuJour(), aTraiter: nouveaux(), donnees: resumeDonnees(),
-    petites: [['etiquettes', 'imprimer', 'Étiquettes'], ['affiches', 'frais', 'Affiches fruits et légumes'], ['factures', 'facture', 'Travailler une facture'], ['liste', 'achat', `Ma liste d'achat${etat.liste.length ? ` (${etat.liste.length})` : ''}`]],
+    petites: [['etiquettes', 'imprimer', 'Étiquettes'], ['factures', 'facture', 'Travailler une facture'], ['liste', 'achat', `Ma liste d'achat${etat.liste.length ? ` (${etat.liste.length})` : ''}`]],
     liens: [['inconnus', `Produits inconnus${aIdentifier().length ? ` (${aIdentifier().length})` : ''}`], ['donnees', 'Mettre à jour les ventes'], ['reglages', 'Réglages']]
   }), 'accueil');
 }
@@ -232,7 +232,7 @@ function reglages() {
 }
 
 const nomVu = x => `${nomFournisseur(x, fournisseursCaisse())} · ${new Date((x.date || String(x.cree).slice(0, 10)) + 'T12:00').toLocaleDateString('fr-FR', { day: 'numeric', month: 'long' })}`;
-let erreurAT = '';
+let erreurAT = '', seqAT = 0; // seul le dernier appel à « À traiter » décide du message d'erreur
 const MSG_ERREUR_DRIVE = 'Erreur de connexion au Drive. Vérifie que Code.gs est à jour et redéployé.';
 function aTraiter(message = '') {
   const vue = vueAT();
@@ -245,6 +245,7 @@ function aTraiter(message = '') {
 /** Montants et nombres de produits : cache du Drive d'abord, puis première lecture des PDF qui n'en ont pas encore. */
 async function chargerEnFond() {
   if (!estRelie() || !navigator.onLine) return;
+  try { const r = await envoyerMarques(); if (r) { cacheAT = r; if (ecranCourant === 'atraiter') aTraiter(); } } catch (x) { }
   const el = vueAT().gardes;
   try { if (await chargerCache(el) && ecranCourant === 'atraiter') aTraiter(); }
   catch (x) { console.error('[V2/ATraiter] cache illisible :', x.message); }
@@ -351,7 +352,8 @@ app.addEventListener('click', async e => {
   }
   if (a === 'at-reessayer') {
     b.disabled = true; b.textContent = 'Je réessaie…';
-    try { cacheAT = await majATraiter(); erreurAT = ''; } catch (x) { erreurAT = MSG_ERREUR_DRIVE; console.error('[V2/ATraiter] échec :', x.message); }
+    const n = ++seqAT;
+    try { cacheAT = await majATraiter(); erreurAT = ''; } catch (x) { if (n === seqAT) erreurAT = MSG_ERREUR_DRIVE; console.error('[V2/ATraiter] échec :', x.message); }
     aTraiter(); chargerEnFond(); return;
   }
   if (a === 'tester-script') {
@@ -370,8 +372,10 @@ app.addEventListener('click', async e => {
   if (a === 'a-traiter') { aTraiter(); chargerEnFond(); return; }
   if (a === 'rafraichir') {
     b.disabled = true; b.innerHTML = 'Je regarde le Drive…';
+    try { await envoyerMarques(); } catch (x) { }
+    const nR = ++seqAT;
     try { cacheAT = await rafraichirMaintenant(); erreurAT = ''; aTraiter(cacheAT.occupe ? 'Un passage était déjà en cours : la liste est celle du dernier passage.' : ''); toast(cacheAT.ajoutes ? `${cacheAT.ajoutes} nouvelle(s) facture(s)` : 'Rien de nouveau sur le Drive'); }
-    catch (x) { erreurAT = MSG_ERREUR_DRIVE; console.error('[V2/ATraiter] échec :', x.message); aTraiter(); }
+    catch (x) { if (nR === seqAT) erreurAT = MSG_ERREUR_DRIVE; console.error('[V2/ATraiter] échec :', x.message); aTraiter(); }
     chargerEnFond();
     return;
   }
@@ -469,7 +473,7 @@ async function syncFond(force = false) {
   if (!force && Date.now() - dernierSync < 120000) return;
   syncEnCours = true; dernierSync = Date.now();
   try {
-    if (!estInvite()) { try { cacheAT = await majATraiter(); erreurAT = ''; } catch (x) { erreurAT = MSG_ERREUR_DRIVE; console.error('[V2/ATraiter] échec :', x.message); } }
+    if (!estInvite()) { try { await envoyerMarques(); } catch (x) { } const n = ++seqAT; try { const v = await majATraiter(); if (n === seqAT) { cacheAT = v; erreurAT = ''; } } catch (x) { if (n === seqAT) erreurAT = MSG_ERREUR_DRIVE; console.error('[V2/ATraiter] échec :', x.message); } }
     try {
       const faits = await prendreExports();
       if (faits.length) toast(`Mis à jour depuis le Drive : ${faits.map(r => nomImport(r).toLowerCase()).join(' et ')}`);

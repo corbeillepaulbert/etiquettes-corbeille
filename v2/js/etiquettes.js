@@ -9,7 +9,7 @@ import { noterInconnu } from './inconnus.js';
 import { telecharger } from './livrer.js';
 
 const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
-const E = { codes: [], noms: {}, force: {}, historique: [], pdf: null, vue: 'planche', page: 0 };
+const E = { codes: [], noms: {}, force: {}, historique: [], pdf: null, vue: 'planche', page: 0, idx: 0 };
 let CACHE = { cle: '', pages: null };
 const estFL = o => /FRUIT|LEG/i.test(o.dep || ''); // même règle que la V1 : les F&L ont leurs affiches
 const imprimable = e => /^\d+$/.test(e) && (e.length === 13 || e.length === 8) && chk(e);
@@ -61,6 +61,13 @@ async function polices() {
   try { await document.fonts.load('900 40px InterE'); await document.fonts.load('700 20px InterE'); } catch (e) { }
 }
 
+/** Balayage gauche / droite sur l'aperçu (seuil 40 px, geste surtout horizontal). */
+function glisser(el, fn) {
+  let x0 = null, y0 = 0;
+  el.addEventListener('touchstart', e => { if (e.touches.length === 1) { x0 = e.touches[0].clientX; y0 = e.touches[0].clientY; } }, { passive: true });
+  el.addEventListener('touchend', e => { if (x0 == null) return; const t = e.changedTouches[0], dx = t.clientX - x0, dy = t.clientY - y0; x0 = null; if (Math.abs(dx) > 40 && Math.abs(dx) > Math.abs(dy) * 1.5) fn(dx < 0 ? 1 : -1); });
+}
+
 /** Dessine une étiquette à l'écran avec exactement les fonctions de l'impression. */
 async function apercu(canvas, o) {
   await polices(); ctx();
@@ -100,7 +107,10 @@ export function ecranEtiquettes(nav, message = '') {
         <div class="btns-pdf">${typeof navigator.share === 'function' ? `<button class="btn btn--principal" data-action="etiq-partager">${icone('imprimer')}Partager</button>` : ''}
           <button class="btn ${typeof navigator.share === 'function' ? 'btn--secondaire' : 'btn--principal'}" data-action="etiq-enregistrer">${icone('import')}Enregistrer le PDF</button></div></div>` : ''}
     ${l.length ? (E.vue === 'etiquette'
-      ? `<canvas class="apercu-etiq" data-apercu aria-label="Aperçu de la première étiquette"></canvas>
+      ? `<div class="etiq-defile"><canvas class="apercu-etiq" data-apercu aria-label="Aperçu de l'étiquette"></canvas>
+        <div class="etiq-nav"><button class="btn btn--secondaire" data-action="etiq-idx" data-d="-1" aria-label="Étiquette précédente" ${E.idx <= 0 ? 'disabled' : ''}>‹</button>
+        <span class="note">${Math.min(E.idx + 1, l.length)} / ${l.length} · glisse pour passer à la suivante</span>
+        <button class="btn btn--secondaire" data-action="etiq-idx" data-d="1" aria-label="Étiquette suivante" ${E.idx >= l.length - 1 ? 'disabled' : ''}>›</button></div></div>
       <button class="btn btn--secondaire" data-action="etiq-vue" data-v="planche">Voir la planche</button>`
       : `<div class="planche-vue"><canvas class="apercu-etiq apercu-planche" data-planche aria-label="Aperçu de la planche A4, 24 étiquettes"></canvas>
         ${pages > 1 ? `<div class="duo"><button class="btn btn--secondaire" data-action="etiq-page" data-d="-1" ${E.page <= 0 ? 'disabled' : ''}>Planche précédente</button><button class="btn btn--secondaire" data-action="etiq-page" data-d="1" ${E.page >= pages - 1 ? 'disabled' : ''}>Planche suivante</button></div>` : ''}
@@ -119,7 +129,8 @@ export function ecranEtiquettes(nav, message = '') {
     ${l.length ? `<button class="btn btn--principal" data-action="etiq-pdf">${icone('imprimer')}Créer le PDF (${l.length})</button>` : ''}
     <button class="btn ${l.length ? 'btn--secondaire' : 'btn--principal'}" data-action="etiq-scanner">${icone('scan', l.length ? 'cb-ico cb-ico--24' : 'cb-ico')}Scanner pour étiqueter</button>
   </div></div>`, 'etiquettes');
-  const cv = document.querySelector('[data-apercu]'); if (cv && l[0]) apercu(cv, l[0]);
+  E.idx = Math.max(0, Math.min(E.idx, l.length - 1));
+  const cv = document.querySelector('[data-apercu]'); if (cv && l[E.idx]) { apercu(cv, l[E.idx]); glisser(cv, d => { const n = E.idx + d; if (n >= 0 && n < l.length) { E.idx = n; ecranEtiquettes(nav); } }); }
   const cp = document.querySelector('[data-planche]'); if (cp) planche(cp, l);
   const q = document.getElementById('etiq-q');
   q.oninput = () => {
@@ -220,8 +231,9 @@ export async function actionEtiquettes(a, b, nav) {
   }
   if (a === 'etiq-ajouter') { const r = ajouter(b.dataset.e); E.pdf = null; await sauver(); ecranEtiquettes(nav); nav.toast(r.ok ? 'Ajouté à la planche' : r.txt.replace(/<[^>]+>/g, '')); return true; }
   if (a === 'etiq-vue') { E.vue = b.dataset.v; ecranEtiquettes(nav); return true; }
+  if (a === 'etiq-idx') { E.idx += +b.dataset.d; ecranEtiquettes(nav); return true; }
   if (a === 'etiq-page') { E.page = Math.max(0, E.page + +b.dataset.d); ecranEtiquettes(nav); return true; }
-  if (a === 'etiq-modifier') { feuilleModifier(nav, +b.dataset.i); return true; }
+  if (a === 'etiq-modifier') { if (E.vue === 'etiquette') E.idx = +b.dataset.i; feuilleModifier(nav, +b.dataset.i); return true; }
   if (a === 'etiq-vider') {
     const avant = E.codes.slice(); E.codes = []; E.pdf = null; await sauver(); ecranEtiquettes(nav);
     nav.toast('Planche vidée', async () => { E.codes = avant; await sauver(); ecranEtiquettes(nav); });
