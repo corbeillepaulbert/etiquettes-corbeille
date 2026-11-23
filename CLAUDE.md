@@ -39,6 +39,13 @@ Appli de La Corbeille Paul Bert. Deux versions cohabitent sur le même site GitH
 - Code et jetons gardés en empreinte SHA-256 dans les propriétés du script (aucune écriture Drive). « Arrêter les sessions invitées » (avec la clé) les supprime toutes.
 - À la fin des 6 h, si le serveur refuse le jeton, ou sur « Quitter le mode invité » : l'appli efface toute la base `corbeille-v2` du téléphone invité.
 
+### Mode inventaire (lot 7, version 6 → 7 du script)
+- Le gérant ouvre l'inventaire (clé) : zones et sous-zones, liste des produits à compter réduite au code-barres et au nom (`inventaire-produits.json`, jamais de prix). Fruits et légumes, pain et produits pesés (codes 2…) exclus.
+- Lien `v2/#inventaire=<adresse /exec en base64>` (jamais la clé). L'inventoriste tape son prénom et le **code du jour** (6 chiffres, affiché chez le gérant, valable 30 min pour entrer, `invCode`) : `invEntrer` (sans clé, 15 codes faux par quart d'heure au plus) renvoie un jeton valable jusqu'à minuit.
+- Le jeton d'inventaire (`jetonInv`) ouvre uniquement `ping`, `invEtat`, `invProduits`, `invEnvoyer`, `invLire`. Dans l'appli, l'inventoriste n'a que les écrans de comptage.
+- Chaque comptage est une ligne (id, code, quantité, sous-zone, heure, qui ; `rem` = correction d'une ligne, `ann` = annulation) : rien n'est écrasé. Un fichier par téléphone dans APPLI V2 (`inv-<inventaire>-<appareil>.json`), doublons ignorés.
+- Fin de journée, `invFermer` ou « Quitter l'inventaire » : l'appli efface toute la base `corbeille-v2` du téléphone de l'inventoriste.
+
 ### Dossier FACTURES ACHAT : lecture seule absolue
 - Le script **lit** FACTURES ACHAT et ses sous-dossiers : il **ne déplace rien, ne renomme rien, ne supprime rien, n'écrit rien** dans ce dossier.
 - Appels autorisés sur ce dossier et son contenu : `getFolderById`, `getFoldersByName`, `getFolders`, `getFiles`, `searchFiles`, `getName`, `getId`, `getDateCreated`, `getLastUpdated`, `getMimeType`, `getSize`, `getBlob`, et depuis la version 6 `DriveApp.getFileById` + `getParents` (lectures pures : ouvrir une facture par son identifiant et vérifier qu'elle est bien sous FACTURES ACHAT, au lieu de parcourir tout le dossier, qui prenait 30 s et plus).
@@ -58,7 +65,7 @@ Appli de La Corbeille Paul Bert. Deux versions cohabitent sur le même site GitH
 - Source : `apps-script/Code.gs` (sans aucun secret ni identifiant de dossier). Installation décrite en tête du fichier.
 - Écritures du script : uniquement `createFolder` (APPLI V2 et son sous-dossier FACTURES_CACHE, une fois chacun), `createFile` et `setContent` sur les fichiers JSON de APPLI V2 (dont `FACTURES_CACHE/{idFacture}.json`).
 - Cache de lecture des factures : le script ne sait pas lire un PDF sans écrire dans le Drive (OCR de l'API Drive avancée = écriture interdite). C'est donc l'appli qui lit la facture (règles V1) et envoie fournisseur / montant / nombre de produits (`cacheEcrire`) ; le script les garde avec, pour empreinte, la date de modification du PDF, et ne les rend (`cacheLire`) que si elle n'a pas changé.
-- Version du script : `ping` renvoie `version`. L'appli exige la version 4 ou plus (version 5 pour le mode invité, qui demande d'exécuter `installer()` une fois pour autoriser l'envoi d'e-mails ; version 6 : factures ouvertes par identifiant, un seul fichier par document JSON, index du cache) (Réglages → « Tester la connexion Apps Script »).
+- Version du script : `ping` renvoie `version`. L'appli exige la version 4 ou plus (version 5 pour le mode invité, qui demande d'exécuter `installer()` une fois pour autoriser l'envoi d'e-mails ; version 6 : factures ouvertes par identifiant, un seul fichier par document JSON, index du cache ; version 7 : inventaire connecté) (Réglages → « Tester la connexion Apps Script »).
 
 ## Prix d'achat lus sur les factures
 
