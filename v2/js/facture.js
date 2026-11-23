@@ -73,6 +73,14 @@ const garder = async () => { await ecrire('factureEnCours', FAC); if (FAC && FAC
 const garderTout = async () => { await ecrire('modifs', MOD); await ecrire('entrees', ENT); await ecrire('importsFaits', FAITS); };
 export const enAttente = () => Object.keys(MOD).length + ENT.length;
 const aujourdhui = () => new Date().toISOString().slice(0, 10);
+/** Lot 11 : les modifications en attente (lecture seule) et l'ajout d'un prix de vente proposé. Renvoie de quoi annuler. */
+export const modifsEnAttente = () => MOD;
+export async function proposerPrix(e, pv, src) {
+  const avant = MOD[e] ? { ...MOD[e] } : undefined;
+  MOD[e] = { ...(MOD[e] || {}), prix: Math.round(pv * 100) / 100, date: aujourdhui(), src: (MOD[e] && MOD[e].src) || src };
+  await garderTout();
+  return async () => { if (avant) MOD[e] = avant; else delete MOD[e]; await garderTout(); };
+}
 
 // ---------- stock : règles de la routine mensuelle ----------
 /** Quantité reçue = montant ÷ prix unitaire quand c'est un entier (même contrôle que la V1 pour lire une ligne). Sinon on ne devine pas. */

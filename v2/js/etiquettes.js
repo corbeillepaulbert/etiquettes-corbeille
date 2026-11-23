@@ -7,6 +7,9 @@ import { configurer, nameOf, modelOf, isTop, cleanName, chk, labelStd, labelTop,
 import { ouvrirScanner } from './moteur/scan.js';
 import { noterInconnu } from './inconnus.js';
 import { telecharger } from './livrer.js';
+import { chargerRefaire, noterImpression, aRefaire, ignorer } from './refaire.js';
+import { estInvite } from './drive.js';
+import { nbNomsARevoir } from './noms.js';
 
 const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 const E = { codes: [], noms: {}, force: {}, historique: [], pdf: null, vue: 'planche', page: 0, idx: 0 };
@@ -19,6 +22,18 @@ export async function chargerEtiquettes() {
   E.noms = await lire('etiqNoms', {});
   E.force = await lire('etiqForce', {});
   E.historique = await lire('etiqHistorique', []);
+  await chargerRefaire(() => ({ noms: E.noms, force: E.force }));
+}
+/** Lot 10 : noms imprimés (repris de la V1 : un nom vide revient au nom de caisse nettoyé). */
+export const nomImprime = o => { ctx(); return nameOf(o); };
+export const nomPerso = e => E.noms[e];
+export const surPlanche = () => E.codes.slice();
+export async function fixerNom(e, v) {
+  const avant = E.noms[e], o = etat.produits[e];
+  v = String(v || '').toUpperCase().replace(/\s+/g, ' ').trim();
+  if (!v || (o && v === cleanName(o.lib))) delete E.noms[e]; else E.noms[e] = v;
+  E.pdf = null; await sauver();
+  return async () => { if (avant === undefined) delete E.noms[e]; else E.noms[e] = avant; await sauver(); };
 }
 async function sauver() {
   await ecrire('etiqSelection', E.codes); await ecrire('etiqNoms', E.noms);
@@ -102,6 +117,8 @@ export function ecranEtiquettes(nav, message = '') {
   <div class="scr__corps">
     <div class="accueil__haut"><h1 class="titre-1">Étiquettes</h1>${l.length ? `<span class="note">${l.length} · ${pages} planche${pages > 1 ? 's' : ''}</span>` : ''}</div>
     ${message ? `<div class="bandeau bandeau--alerte">${icone('info', 'cb-ico cb-ico--24')}<span>${message}</span></div>` : ''}
+    ${carteRefaire()}
+    ${!estInvite() && Object.keys(etat.produits).length ? (n => n ? `<button class="ligne" data-action="noms" style="border:0;font:inherit;text-align:left;width:100%"><div class="ligne__ico">${icone('etiquette')}</div><div class="ligne__txt"><div class="ligne__titre">Noms à revoir (${n})</div><div class="ligne__detail">Trop longs ou abrégés</div></div>${icone('chevron', 'cb-ico cb-ico--24')}</button>` : '')(nbNomsARevoir()) : ''}
     ${E.pdf ? `<div class="carte" style="display:grid;gap:12px;box-shadow:inset 0 0 0 2px var(--corbeille)"><div class="titre-2">PDF prêt</div>
         <div class="note">${esc(E.pdf.nom)} · ${E.pdf.pages} page${E.pdf.pages > 1 ? 's' : ''} A4. Impression à 100 %, sans ajuster à la page.</div>
         <div class="btns-pdf">${typeof navigator.share === 'function' ? `<button class="btn btn--principal" data-action="etiq-partager">${icone('imprimer')}Partager</button>` : ''}
@@ -144,6 +161,31 @@ export function ecranEtiquettes(nav, message = '') {
         <div class="ligne__txt"><div class="ligne__titre">${esc(joli(o.lib))}</div><div class="ligne__detail">${o.prix != null ? euros(o.prix) : 'sans prix'}</div></div>${icone('nouveau', 'cb-ico cb-ico--24')}</button>`).join('')
       : '<div class="note">Aucun produit trouvé (les fruits et légumes ont leurs affiches).</div>';
   };
+}
+
+// ---------- lot 9 : étiquettes à refaire ----------
+function carteRefaire() {
+  if (estInvite()) return '';
+  const R = aRefaire(); if (!R.length) return '';
+  const hors = R.filter(x => !E.codes.includes(x.e)).length;
+  return `<div class="carte" style="display:grid;gap:12px;box-shadow:inset 0 0 0 2px var(--abricot)">
+    <div class="titre-2">${R.length} étiquette${R.length > 1 ? 's' : ''} à refaire</div>
+    <div class="note">Le rayon ne dit plus la même chose que la caisse : prix changé, nouvelle fiche ou Top vente.</div>
+    ${hors ? `<button class="btn btn--principal" data-action="etiq-refaire-tout">${icone('nouveau', 'cb-ico cb-ico--24')}Mettre ${hors > 1 ? `les ${hors}` : 'la'} sur la planche</button>` : '<div class="note fort">Elles sont toutes sur la planche.</div>'}
+    <button class="btn btn--secondaire" data-action="etiq-refaire-voir">Voir pourquoi</button></div>`;
+}
+export function ecranRefaire(nav) {
+  const R = aRefaire();
+  nav.afficher(`<div class="scr cb">${barreMode('magasin', 'Étiquettes', true)}
+  <div class="scr__corps">
+    <h1 class="titre-1">À refaire</h1>
+    ${R.length ? R.map(x => `<div class="ligne"><div class="ligne__txt"><div class="ligne__titre">${esc(nameOf(x.o))}</div><div class="ligne__detail">${esc(x.why)}</div></div>
+      ${E.codes.includes(x.e) ? '<span class="note">sur la planche</span>' : `<button class="btn btn--secondaire" data-action="etiq-refaire-ajouter" data-e="${esc(x.e)}">Ajouter</button>`}
+      <button class="btn btn--discret" data-action="etiq-refaire-ignorer" data-e="${esc(x.e)}">Ignorer</button></div>`).join('')
+      : '<div class="carte"><div class="titre-2">Toutes les étiquettes sont à jour.</div></div>'}
+    <div class="note">La liste se met à jour à chaque export produits. Une étiquette sort de la liste dès que son PDF est fabriqué.</div>
+  </div>
+  <div class="scr__bas"><button class="btn btn--principal" data-action="etiquettes">Retour à la planche</button></div></div>`, 'etiq-refaire');
 }
 
 function feuilleModifier(nav, i) {
@@ -189,7 +231,7 @@ async function creerPdf(nav, bouton) {
     E.pdf = { nom, pages: Math.ceil(l.length / 24), blob };
     E.historique.unshift({ date: d.toISOString(), n: l.length, codes: l.map(o => o.e) });
     E.historique = E.historique.slice(0, 20);
-    await sauver();
+    await sauver(); await noterImpression(l);
     ecranEtiquettes(nav);
   } catch (x) { ecranEtiquettes(nav, `Le PDF n'a pas pu être fabriqué : ${esc(x.message)}`); }
 }
@@ -230,6 +272,23 @@ export async function actionEtiquettes(a, b, nav) {
     return true;
   }
   if (a === 'etiq-ajouter') { const r = ajouter(b.dataset.e); E.pdf = null; await sauver(); ecranEtiquettes(nav); nav.toast(r.ok ? 'Ajouté à la planche' : r.txt.replace(/<[^>]+>/g, '')); return true; }
+  if (a === 'etiq-refaire-tout' || a === 'etiq-refaire-ajouter') {
+    if (estInvite()) return true;
+    const avant = E.codes.slice();
+    const codes = a === 'etiq-refaire-tout' ? aRefaire().map(x => x.e) : [b.dataset.e];
+    const n = codes.filter(e => !E.codes.includes(e)); E.codes.push(...n); E.pdf = null; await sauver();
+    if (a === 'etiq-refaire-tout') ecranEtiquettes(nav); else ecranRefaire(nav);
+    nav.toast(`${n.length} étiquette${n.length > 1 ? 's' : ''} ajoutée${n.length > 1 ? 's' : ''} à la planche`, async () => { E.codes = avant; await sauver(); ecranEtiquettes(nav); });
+    return true;
+  }
+  if (a === 'etiq-refaire-voir') { if (!estInvite()) ecranRefaire(nav); return true; }
+  if (a === 'etiq-refaire-ignorer') {
+    if (estInvite()) return true;
+    const x = aRefaire().find(y => y.e === b.dataset.e); if (!x) return true;
+    const defaire = await ignorer(x.e, x.why); ecranRefaire(nav);
+    nav.toast(`${nameOf(x.o)} : ignorée`, async () => { await defaire(); ecranRefaire(nav); });
+    return true;
+  }
   if (a === 'etiq-vue') { E.vue = b.dataset.v; ecranEtiquettes(nav); return true; }
   if (a === 'etiq-idx') { E.idx += +b.dataset.d; ecranEtiquettes(nav); return true; }
   if (a === 'etiq-page') { E.page = Math.max(0, E.page + +b.dataset.d); ecranEtiquettes(nav); return true; }

@@ -65,6 +65,10 @@ export async function periodeCouvrant(du, au, tol = 2) {
   return Object.values(P).find(p => Math.abs(jourMs(p.du) - jourMs(du)) <= tol * 864e5 && Math.abs(jourMs(p.au) - jourMs(au)) <= tol * 864e5) || null;
 }
 
+// Avant chaque import qui remplace les fiches, les modules intéressés (étiquettes à refaire…) voient l'avant et l'après.
+const SURIMPORT = [];
+export function siImport(fn) { SURIMPORT.push(fn); }
+
 export function joursVentes() { return etat.meta.ventes?.jours || 365; }
 
 /** Période d'un fichier de ventes, lue dans son nom (même règle que la V1). */
@@ -100,10 +104,12 @@ export async function importerFichier(file, origine = {}) {
   const cFo = h.findIndex(x => /^FOURNISSEURACTIF$|^FOURNISSEUR$/.test(norm(x)));
   const cRf = h.findIndex(x => /^REFFOURNISSEUR$/.test(norm(x)));
   const cSt = h.findIndex(x => norm(x) === 'STOCKACTUEL');
+  const cCA = type === 'ventes' ? findCol(h, ['Chiffre affaire (TTC)', 'CA TTC']) : -1;
+  const cMV = type === 'ventes' ? findCol(h, ['marge valeur']) : -1;
   // Ventes : un fichier d'un an (ou plus) est la référence des fiches ; un fichier plus court (4 semaines, un Ramadan…) est rangé à part comme « période ».
   const per = type === 'ventes' ? periodeDepuisNom(file.name) : null;
   const principal = type === 'base' || !per.du || per.jours >= 300 || !etat.meta.ventes;
-  const qm = {};
+  const qm = {}, cam = {}; let caTot = 0, mvTot = 0, mvN = 0;
   const P = { ...etat.produits };
   const vus = new Set();
   let n = 0;
@@ -128,6 +134,8 @@ export async function importerFichier(file, origine = {}) {
     } else {
       const q = num(r[cQ]) || 0;
       qm[e] = (qm[e] || 0) + q;
+      if (cCA >= 0) { const ca = num(r[cCA]) || 0; cam[e] = Math.round(((cam[e] || 0) + ca) * 100) / 100; caTot += ca; }
+      if (cMV >= 0) { const mv = num(r[cMV]); if (mv != null) { mvTot += mv; mvN++; } }
       if (!principal) { vus.add(e); n++; continue; }
       o.q = (vus.has(e) ? (o.q || 0) : 0) + q; vus.add(e);
       if (o.prix == null && cP >= 0) o.prix = num(r[cP]);
@@ -136,12 +144,13 @@ export async function importerFichier(file, origine = {}) {
     }
     P[e] = o; n++;
   }
-  if (per && per.du) await rangerPeriode({ ...per, nom: file.name, q: qm });
+  if (per && per.du) await rangerPeriode({ ...per, nom: file.name, q: qm, ...(cCA >= 0 ? { ca: cam, caTot: Math.round(caTot * 100) / 100 } : {}), ...(mvN ? { margeTot: Math.round(mvTot * 100) / 100 } : {}) });
   if (!principal) return { type: 'periode', lignes: n, du: per.du, au: per.au, jours: per.jours };
   if (type === 'ventes') {
     // les produits absents du nouveau fichier n'ont pas vendu sur la période
     for (const e of Object.keys(P)) if (!vus.has(e)) P[e] = { ...P[e], q: 0 };
   }
+  for (const f of SURIMPORT) { try { await f({ type, avant: etat.produits, apres: P, premier: !etat.meta[type], jours: type === 'ventes' ? periodeDepuisNom(file.name).jours : undefined }); } catch (x) { console.error('[V2/Import] suite :', x.message); } }
   const meta = { ...etat.meta, [type]: { nom: file.name, lignes: n, v: 3, date: new Date().toISOString(), ...origine, ...(type === 'ventes' ? periodeDepuisNom(file.name) : {}) } };
   await ecrire('produits', P); await ecrire('meta', meta);
   etat.produits = P; etat.meta = meta;
