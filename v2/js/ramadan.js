@@ -1,10 +1,11 @@
 // Lot 8 : Mode Ramadan. Le Ramadan avance d'environ 11 jours chaque année : on compare Ramadan à Ramadan (jamais mars à mars),
-// grâce à un export Vente PLU par Ramadan passé (données fiables depuis 2023). Prévision = moyenne pondérée des Ramadans passés
-// (le plus récent compte le plus) × tendance actuelle du produit (4 dernières semaines contre l'année), bornée par la date limite.
-import { etat, lire, ecrire, joursVentes } from './donnees.js';
+// grâce à un export Vente PLU par Ramadan passé (données fiables depuis 2023), nommé simplement « RAMADAN 2024 ».
+// Prévision = moyenne pondérée des Ramadans passés (le plus récent compte le plus), bornée par la date limite.
+// Décision du 23/11/2026 : plus de tendance sur les 4 dernières semaines, seulement les périodes de Ramadan.
+import { etat, lire, ecrire, joursVentes, siPeriodeNommee } from './donnees.js';
 import { barreMode, joli } from './ecrans.js';
 import { icone } from './icones.js';
-import { besoinsRamadan, besoinsAchat, carteExports, brancherBesoins, actionBesoins, jour, fr } from './besoins.js';
+import { besoinsRamadan, carteExports, brancherBesoins, actionBesoins, jour, fr } from './besoins.js';
 import { categorie } from './conseil.js';
 
 const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
@@ -16,6 +17,13 @@ async function table() {
   return TABLE;
 }
 const ms = d => new Date(d + 'T12:00').getTime();
+// « RAMADAN 2024.xlsx » : du premier jour de jeûne à la veille de l'Aïd de cette année-là.
+siPeriodeNommee(async nom => {
+  const m = /RAMADAN\D{0,3}(20\d{2})/i.exec(nom); if (!m) return null;
+  const r = (await table()).find(x => x.annee === +m[1]); if (!r) return null;
+  const au = jour(-1, new Date(r.aid + 'T12:00'));
+  return { du: r.debut, au, jours: Math.round((ms(au) - ms(r.debut)) / 864e5) + 1 };
+});
 /** Prochain Ramadan (celui en cours compte), et les Ramadans passés depuis 2023. */
 export async function calendrier() {
   const T = await table(), auj = jour(0);
@@ -32,24 +40,22 @@ export async function tuileRamadan() {
   return `<button class="tuile tuile--ramadan" data-action="ramadan">${icone('agenda')}<div><b>Préparer le Ramadan</b><span>${txt} · ta liste est prête</span></div></button>`;
 }
 
-/** Prévision pour un produit. R : [{annee, periode}] (périodes reçues), P4 : 4 dernières semaines (ou null). */
-export function prevoir(o, R, P4, duree = 30) {
+/** Prévision pour un produit. R : [{annee, periode}] (périodes de Ramadan reçues). */
+export function prevoir(o, R, duree = 30) {
   const pts = R.map((r, i) => ({ annee: r.annee, q: r.periode.q[o.e] || 0, j: r.periode.jours, w: i + 1 }));
   if (!pts.length) return null;
   const parJourR = pts.reduce((t, p) => t + p.w * p.q / p.j, 0) / pts.reduce((t, p) => t + p.w, 0);
   const an = (o.q || 0) / joursVentes();
   const uplift = an > 0 ? parJourR / an : (parJourR > 0 ? 9 : 0);
-  let tendance = 1;
-  if (P4 && an > 0) tendance = Math.min(1.5, Math.max(0.7, ((P4.q[o.e] || 0) / P4.jours) / an));
   const dernierR = pts[pts.length - 1];
-  const prevu = Math.round(parJourR * duree * tendance);
+  const prevu = Math.round(parJourR * duree);
   const ref = dernierR.q; // ventes réelles du dernier Ramadan reçu (affichées telles quelles)
-  return { pts, parJourR, uplift, tendance, prevu, ref, evol: ref > 0 ? Math.round((prevu / ref - 1) * 100) : null };
+  return { pts, parJourR, uplift, prevu, ref, evol: ref > 0 ? Math.round((prevu / ref - 1) * 100) : null };
 }
 
 async function ecranRamadan(nav, message = '') {
   const { prochain, passes, dans } = await calendrier();
-  const besoins = await besoinsRamadan(passes), b4 = (await besoinsAchat())[0];
+  const besoins = await besoinsRamadan(passes);
   const R = besoins.filter(b => b.periode).map(b => ({ annee: +b.cle, periode: b.periode }));
   const duree = prochain ? Math.round((ms(prochain.aid) - ms(prochain.debut)) / 864e5) : 30;
   const DLUO = await lire('dluo', {});
@@ -57,7 +63,7 @@ async function ecranRamadan(nav, message = '') {
   if (R.length) {
     for (const o of Object.values(etat.produits)) {
       const c = categorie(o); if (!c) continue;
-      const x = prevoir(o, R, b4.periode, duree); if (!x || x.prevu < 3) continue;
+      const x = prevoir(o, R, duree); if (!x || x.prevu < 3) continue;
       const mot = MOTS.test(String(o.lib).toUpperCase().normalize('NFD').replace(/[̀-ͯ]/g, ''));
       if (!(x.uplift >= 1.4 || (mot && x.uplift >= 1.1))) continue;
       const dluo = DLUO[o.e] || c.dluo, fois = dluo < duree ? Math.ceil(duree / dluo) : 1;
@@ -78,8 +84,8 @@ async function ecranRamadan(nav, message = '') {
     <h1 class="titre-1">Préparer le Ramadan</h1>
     ${bandeau}
     ${message ? `<div class="bandeau bandeau--alerte">${icone('info', 'cb-ico cb-ico--24')}<span>${message}</span></div>` : ''}
-    ${carteExports([...besoins, { ...b4, titre: 'Tendance : 4 dernières semaines' }], 'Pour comparer Ramadan à Ramadan')}
-    ${R.length ? `<div class="note">L'appli a mémorisé tes Ramadans ${annees.length > 1 ? annees.slice(0, -1).join(', ') + ' et ' + annees.at(-1) : annees[0]}. Elle compare Ramadan à Ramadan, ajuste avec la tendance de tes ventes actuelles${b4.periode ? '' : ' (pas encore d\'export récent : tendance non prise en compte)'} et respecte les dates limites.</div>
+    ${carteExports(besoins, 'Pour comparer Ramadan à Ramadan')}
+    ${R.length ? `<div class="note">L'appli a mémorisé tes Ramadans ${annees.length > 1 ? annees.slice(0, -1).join(', ') + ' et ' + annees.at(-1) : annees[0]}. Elle compare Ramadan à Ramadan, le plus récent comptant le plus, et respecte les dates limites.</div>
       <h2 class="titre-2">Produits du Ramadan <span class="note">(${L.length})</span></h2>
       ${L.length ? L.slice(0, 60).map(ligne).join('') : '<div class="carte"><div class="note">Aucun produit ne vend nettement plus pendant le Ramadan dans les exports reçus.</div></div>'}` : ''}
   </div><div class="scr__bas">

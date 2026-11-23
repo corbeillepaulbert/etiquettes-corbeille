@@ -27,7 +27,7 @@ export async function besoinsAchat() {
 /** Un export par Ramadan passé : du premier jour de jeûne à la veille de l'Aïd. */
 export async function besoinsRamadan(ramadans) {
   const out = [];
-  for (const r of ramadans) { const au = jour(-1, new Date(r.aid + 'T12:00')); out.push({ cle: String(r.annee), titre: `Ramadan ${r.annee}`, du: r.debut, au, periode: await periodeCouvrant(r.debut, au) }); }
+  for (const r of ramadans) { const au = jour(-1, new Date(r.aid + 'T12:00')); out.push({ cle: String(r.annee), titre: `Ramadan ${r.annee}`, du: r.debut, au, nom: `RAMADAN ${r.annee}.xlsx`, periode: await periodeCouvrant(r.debut, au) }); }
   return out;
 }
 
@@ -39,7 +39,7 @@ export function carteExports(besoins, pourQuoi) {
   return `<div class="carte exp-carte">
     <div class="titre-3">Il me manque ${manquants.length} export${manquants.length > 1 ? 's' : ''}</div>
     <div class="note">${esc(pourQuoi)}, dépose l'export <b>Vente PLU du ${fr(m.du)} au ${fr(m.au)}</b> dans EXPORTS STOREPOS.</div>
-    <div class="note">Garde les dates dans le nom, par exemple <b style="overflow-wrap:anywhere">${esc(nomConseille(m.du, m.au))}</b> : c'est comme ça que l'appli le reconnaît.</div>
+    <div class="note">${m.nom ? `Nomme-le <b>${esc(m.nom.replace(/\.xlsx$/, ''))}</b>` : `Garde les dates dans le nom, par exemple <b style="overflow-wrap:anywhere">${esc(nomConseille(m.du, m.au))}</b>`} : c'est comme ça que l'appli le reconnaît.</div>
     <div class="exp-liste">${besoins.map(b => `<div class="exp-ligne"><div><b>${esc(b.titre)}</b><div class="note">${fr(b.du)} → ${fr(b.au)}</div></div>${b.periode ? `<span class="exp-ok">${icone('check', 'cb-ico cb-ico--24')}reçu</span>` : '<span class="exp-ko">manquant</span>'}</div>`).join('')}</div>
     ${estRelie() ? '<button class="btn btn--principal" data-action="besoins-drive">Vérifier le Drive</button>' : ''}
     <label class="btn btn--secondaire" style="cursor:pointer">${icone('import', 'cb-ico cb-ico--24')}Choisir le fichier sur cet appareil<input type="file" accept=".xlsx,.csv,.txt" multiple hidden data-besoins-fichiers></label>

@@ -173,7 +173,7 @@ export async function appelInv(action, donnees = {}) {
 export async function arreterInvites() { const r = await appel('inviteArreter'); if (!r.ok) throw new Error('refusé'); return r.arretees || 0; }
 
 // ---------- exports StorePOS ----------
-const typeProbable = nom => /vente|plu/i.test(nom) ? 'ventes' : 'base';
+const typeProbable = nom => /vente|plu|ramadan/i.test(nom) ? 'ventes' : 'base';
 /** Prend dans EXPORTS STOREPOS le dernier fichier produits et le dernier fichier ventes, s'ils sont plus récents que ceux déjà chargés. */
 export async function prendreExports({ forcer = false } = {}) {
   const r = await appel('exports'); if (!r.ok) throw new Error('refusé');
@@ -183,14 +183,17 @@ export async function prendreExports({ forcer = false } = {}) {
   // fichiers de ventes : tous ceux qui portent leurs dates (un an = référence ; 4 semaines, Ramadan… = périodes), du plus ancien au plus récent
   const ventes = r.fichiers.filter(f => typeProbable(f.nom) === 'ventes').reverse();
   const vus = await lire('exportsVus', {});
+  // réparation : un export de Ramadan pris pour la référence des ventes (avant que l'appli connaisse ces noms) → on relit les ventes
+  const reparer = !!(etat.meta.ventes && /RAMADAN/i.test(etat.meta.ventes.nom || ''));
   for (const f of [base, ...ventes].filter(Boolean)) {
     const t = typeProbable(f.nom), deja = etat.meta[t];
-    if (!forcer && vus[f.id] === f.maj) continue;
+    if (!forcer && !(reparer && t === 'ventes') && vus[f.id] === f.maj) continue;
     if (!forcer && t === 'base' && deja && deja.driveId === f.id && deja.driveMaj === f.maj && deja.v === 3) { vus[f.id] = f.maj; continue; }
     const c = await appel('fichier', { id: f.id }); if (!c.ok) throw new Error('fichier refusé : ' + f.nom);
     const octets = Uint8Array.from(atob(c.base64), ch => ch.charCodeAt(0));
-    const res = await importerFichier(new File([octets], c.nom), { driveId: f.id, driveMaj: f.maj });
-    vus[f.id] = f.maj; faits.push(res);
+    try { const res = await importerFichier(new File([octets], c.nom), { driveId: f.id, driveMaj: f.maj }); faits.push(res); }
+    catch (x) { console.error(`[V2/Drive] ${f.nom} ignoré : ${x.message}`); }
+    vus[f.id] = f.maj;
   }
   await ecrire('exportsVus', vus);
   return faits;
