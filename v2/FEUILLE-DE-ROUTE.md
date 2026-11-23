@@ -53,7 +53,7 @@ Mise à jour du 21/11/2026. Chaque lot s'utilise seul ; la V1 reste en productio
 | 3 (fin) | Réception : factures des grossistes en libre-service (Metro, Promocash) reconnues | à faire |
 | 4 | Fichier d'import StorePOS complet (modes 1/2/3 pour toutes les fiches, pas seulement les inconnus) | à faire |
 | — | PILOT dans l'appli : nom, icône, couleur indigo (si validé) | à décider |
-| 7 | **Inventaire connecté en mode invité** (voir plus haut) | à faire, avant le gros inventaire physique |
+| 7 | **Inventaire connecté en mode invité** (voir plus haut) | partie 1 faite (zones, code du jour, comptage hors ligne, envoi au Drive, suivi simple, script v7) ; reste : écarts et oublis, stock de référence, rapport d'étape, clôture recalée |
 | — | Bascule : la V2 remplace la V1 à la racine, copie de la V1 gardée quelques semaines | après les tests iPhone |
 
 Idée de la maquette non retenue pour l'instant : dates courtes (alerte 10 jours avant la date limite).

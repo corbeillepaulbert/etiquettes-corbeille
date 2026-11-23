@@ -246,3 +246,10 @@ html,body{margin:0;background:var(--papier)}
 .etiq-nav .note{text-align:center;flex:1}
 .tuile--fl{background:var(--alerte);color:#fff}
 .tuile--semaine{background:var(--encre-2);color:#fff}
+/* Lot 7 : inventaire connecté */
+.inv-pave{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:var(--espace-2)}
+.inv-touche{min-height:var(--cible-geste);background:var(--carte);color:var(--encre);box-shadow:var(--ombre-carte);font:600 26px/1 var(--font-titre)}
+.inv-touche--gris{background:var(--trait)}
+.inv-touche--plus{background:var(--inventaire-clair);color:var(--inventaire);font-weight:800}
+.inv-qte{font:800 48px/1 var(--font-titre);font-variant-numeric:tabular-nums}
+.inv-code{font:800 56px/1 var(--font-titre);letter-spacing:4px;font-variant-numeric:tabular-nums;text-align:center}

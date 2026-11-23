@@ -21,6 +21,9 @@ import { chargerConfig, estRelie, relier, delier, aTraiterEnCache, majATraiter, 
 import { ecranAccueilInvite, ecranDemandeInvite, ecranInviteFini, blocInviter, resteInvite } from './invite.js';
 import { toutEffacer } from './donnees.js';
 import { aRefaire } from './refaire.js';
+import { chargerComptage, actionComptage, ecranZones, dernierEnvoi, oublierCourant, synchroniser as synchroInv, demarrer as demarrerInv } from './comptage.js';
+import { actionInventaire, ecranEntrer } from './inventaire.js';
+import { estInventoriste, infoInventoriste, siInventaireFini, urlInventaireDuLien } from './drive.js';
 import { chargerNoms, actionNoms, nbNomsARevoir } from './noms.js';
 import { actionPrix, nbPrixARevoir } from './prix.js';
 import { actionHebdo } from './hebdo.js';
@@ -60,10 +63,18 @@ function resumeDonnees() {
 
 // ---------- écrans ----------
 let urlInvitation = ''; // adresse /exec venue d'un lien d'invitation, en attente du code
+let urlInventaire = ''; // adresse /exec venue d'un lien d'inventaire, en attente du code du jour
 let demandeInvite = null; // { demande, minutes, nom }
 async function accueil() {
   courant = null;
   if (modeCaisse()) { afficher(ecranCaisse(), 'caisse'); return; }
+  if (estInventoriste()) {
+    if (infoInventoriste().fin <= Date.now()) { await terminerInventaire(); return; }
+    ecranZones(nav); synchroInv().then(ok => ok && ecranCourant === 'inv-zones' && ecranZones(nav));
+    demarrerInv(() => { if (ecranCourant === 'inv-zones') ecranZones(nav); });
+    return;
+  }
+  if (!estRelie() && urlInventaire) { ecranEntrer(nav); return; }
   if (estInvite()) { afficher(ecranAccueilInvite({ fin: finInvite(), nom: nomInvite(), donnees: resumeDonnees(), planche: (await lire('etiqSelection', [])).length }), 'accueil'); return; }
   if (!estRelie() && urlInvitation) {
     afficher(`<div class="scr cb"><div class="scr__corps"><h1 class="titre-1">Bonjour</h1>
@@ -75,6 +86,7 @@ async function accueil() {
   const ram = await tuileRamadan(), refaire = aRefaire().length, lundi = new Date().getDay() === 1;
   afficher(ecranAccueil({
     extra: `<button class="tuile tuile--fl" data-action="affiches">${icone('fruit')}<div><b>Fruits et légumes</b><span>Affiches et fiche de caisse</span></div></button>` + ram
+      + (estAdmin() ? `<button class="tuile tuile--inventaire" data-action="mode" data-mode="inventaire">${icone('inventaire')}<div><b>Inventaire</b><span>Compter à plusieurs, en direct</span></div></button>` : '')
       + `<button class="tuile tuile--semaine" data-action="hebdo">${icone('semaine')}<div><b>Point de la semaine</b><span>${lundi ? "C'est lundi : dépose l'export des 7 derniers jours" : 'Ventes, achats et à faire des 7 derniers jours'}</span></div></button>`,
     bonjour: 'Bonjour', date: dateDuJour(), aTraiter: nouveaux(), donnees: resumeDonnees(),
     petites: [['etiquettes', 'imprimer', `Étiquettes${refaire ? ` (${refaire} à refaire)` : ''}`], ['factures', 'facture', 'Travailler une facture'], ['liste', 'achat', `Ma liste d'achat${etat.liste.length ? ` (${etat.liste.length})` : ''}`]],
@@ -285,10 +297,14 @@ const nav = { afficher: (h, n) => afficher(h, n), toast: (t, f) => toast(t, f), 
 app.addEventListener('click', async e => {
   const b = e.target.closest('[data-action]'); if (!b) return;
   const a = b.dataset.action;
+  if (estInventoriste() && !/^(inv-.*|accueil)$/.test(a)) { console.warn('[V2/Inventaire] action refusée :', a); return accueil(); }
+  if (a === 'inv-quitter') { await terminerInventaire(true); return; }
   if (/^at-/.test(a) || a === 'rafraichir' || a === 'traite' || a === 'a-traiter' || a === 'tester-script') console.log(`[V2/ATraiter] clic « ${a} »${b.dataset.id ? ' facture ' + b.dataset.id : ''}`);
   if (await actionEtiquettes(a, b, nav)) return;
   if (interditEnCaisse(a)) { console.warn('[V2/Caisse] action refusée :', a); return accueil(); }
   if (await actionCaisse(a, b, nav)) return;
+  if (await actionComptage(a, b, nav)) return;
+  if (await actionInventaire(a, b, nav, { urlLien: urlInventaire, entre: () => { urlInventaire = ''; accueil(); } })) return;
   if (await actionInconnus(a, b, nav)) return;
   if (await actionRamadan(a, b, nav)) return;
   if (await actionConseil(a, b, nav)) return;
@@ -339,7 +355,7 @@ app.addEventListener('click', async e => {
     catch (x) { zone.innerHTML = `<div class="bandeau bandeau--erreur"><span>${esc(x.message)}</span></div>`; }
     return;
   }
-  if (a === 'mode') { if (b.dataset.mode === 'inventaire') return pasEncore('inventaire'); return ouvrirMode(b.dataset.mode); }
+  if (a === 'mode') { if (b.dataset.mode === 'inventaire') { if (estAdmin()) return actionInventaire('inventaire', b, nav); return pasEncore('inventaire'); } return ouvrirMode(b.dataset.mode); }
   if (a === 'at-onglet') { choisirOnglet(b.dataset.o); aTraiter(); document.querySelector('.scr__corps').scrollTop = 0; return; }
   if (a === 'at-voir') {
     const id = b.dataset.id, x = (cacheAT.elements || []).find(y => y.id === id); if (!x) return;
@@ -453,7 +469,7 @@ ecouterDouchette(code => { if (!document.querySelector('.scan-plein')) resultat(
 
 // ---------- mode invité : fin de session ----------
 // L'invité ne fait que des étiquettes : tout le reste est refusé (et le serveur ne lui donne que les produits).
-const INTERDIT_INVITE = /^(noms|nom-.*|prix|prix-.*|hebdo|etiq-refaire-.*|factures|fac-.*|a-traiter|at-.*|rafraichir|traite|reglages|fin-reglages|relier|delier|tester-script|donnees|exports-drive|reprendre-v1|mode|scanner|scanner-achat|liste|ouvrir-fiche|vider|retirer|affiches|af-.*|inconnus|inc-.*|caisse-.*|conseil|cons-.*|besoins-.*|ramadan|ram-.*|invite-lien|invite-arreter)$/;
+const INTERDIT_INVITE = /^(inventaire|inv-.*|noms|nom-.*|prix|prix-.*|hebdo|etiq-refaire-.*|factures|fac-.*|a-traiter|at-.*|rafraichir|traite|reglages|fin-reglages|relier|delier|tester-script|donnees|exports-drive|reprendre-v1|mode|scanner|scanner-achat|liste|ouvrir-fiche|vider|retirer|affiches|af-.*|inconnus|inc-.*|caisse-.*|conseil|cons-.*|besoins-.*|ramadan|ram-.*|invite-lien|invite-arreter)$/;
 let minuteurInvite = null;
 function surveillerInvite() {
   clearInterval(minuteurInvite);
@@ -472,6 +488,16 @@ async function terminerInvite() {
   urlInvitation = '';
   afficher(ecranInviteFini(), 'invite-fini');
 }
+// ---------- inventoriste : fin de journée, inventaire fermé ou « Quitter » ----------
+async function terminerInventaire(volontaire = false) {
+  const reste = await dernierEnvoi();
+  if (volontaire && reste > 0 && !confirmerQuitter) { confirmerQuitter = true; toast(`${reste} comptage(s) pas encore envoyé(s) : retrouve du réseau, ou touche encore « Quitter » pour les perdre.`); setTimeout(() => { confirmerQuitter = false; }, 8000); return; }
+  console.log('[V2/Inventaire] fin de session : effacement des données');
+  oublierCourant(); await toutEffacer(); await chargerConfig(); await chargerComptage(); urlInventaire = '';
+  afficher(`<div class="scr cb"><div class="scr__corps" style="justify-content:center"><h1 class="titre-1">Merci</h1><div class="carte"><div class="titre-2">L'inventaire est fini pour toi aujourd'hui.</div><div class="note" style="margin-top:8px">Tes comptages sont envoyés et ce téléphone a été effacé. Demain, rouvre le lien et tape le nouveau code.</div></div></div></div>`, 'inv-fini');
+}
+let confirmerQuitter = false;
+siInventaireFini(() => { if (estInventoriste()) terminerInventaire(); });
 siInconnuChange(() => planifierSync());
 siInviteFini(() => { if (estInvite()) terminerInvite(); });
 document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible' && estInvite() && Date.now() >= finInvite()) terminerInvite(); });
@@ -506,14 +532,17 @@ document.addEventListener('visibilitychange', () => { if (document.visibilitySta
   await charger();
   await chargerConfig();
   // lien d'invitation (#invite=…) : gardé tant que le code n'est pas validé, puis retiré de l'adresse
-  const venue = urlDuLien();
+  const venue = urlDuLien(), venueInv = urlInventaireDuLien();
   if (venue && !estAdmin()) { urlInvitation = venue; await ecrire('inviteUrl', venue); }
   else if (!estRelie()) { const u = await lire('inviteUrl', ''); if (urlValide(u)) urlInvitation = u; }
+  if (venueInv && !estAdmin() && !estInventoriste()) { urlInventaire = venueInv; urlInvitation = ''; await ecrire('inventaireUrl', venueInv); }
+  else if (!estRelie() && !estInventoriste()) { const u = await lire('inventaireUrl', ''); if (urlValide(u)) urlInventaire = u; }
   if (location.hash) history.replaceState(null, '', location.pathname + location.search);
   if (estInvite() && finInvite() <= Date.now()) { await terminerInvite(); return; }
   if (estInvite()) surveillerInvite();
   await chargerEtiquettes();
   await chargerNoms();
+  await chargerComptage();
   await chargerFacture();
   await chargerAffiches();
   await chargerConseil();

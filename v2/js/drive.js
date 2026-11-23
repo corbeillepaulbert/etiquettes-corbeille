@@ -9,6 +9,11 @@ export const finInvite = () => (estInvite() ? config.fin : 0);
 export const nomInvite = () => (estInvite() ? config.nom || '' : '');
 export const estRelie = () => !!(config && config.url && (config.cle || (config.jeton && config.fin > Date.now())));
 export const estAdmin = () => !!(config && config.url && config.cle);
+/** Lot 7 : inventoriste entré avec le code du jour (session jusqu'à minuit, sans clé). */
+export const estInventoriste = () => !!(config && config.inventaire && config.jetonInv);
+export const infoInventoriste = () => (estInventoriste() ? { prenom: config.prenom || '', fin: config.fin || 0, inv: config.inv || '' } : null);
+let quandInventaireFini = null;
+export function siInventaireFini(fn) { quandInventaireFini = fn; }
 const URL_EXEC = /^https:\/\/script\.google\.com\/macros\/s\/[\w-]+\/exec$/;
 export const urlValide = u => URL_EXEC.test(String(u || ''));
 export async function relier(url, cle) {
@@ -26,7 +31,7 @@ let quandInviteFini = null;
 export function siInviteFini(fn) { quandInviteFini = fn; }
 const ACTIONS_AT = new Set(['aTraiter', 'rafraichir', 'traiter', 'facture', 'cacheLire', 'cacheEcrire', 'ping']);
 export const VERSION_SCRIPT_MIN = 4; // version de Code.gs attendue par cette appli
-const RELECTURE = new Set(['ping', 'aTraiter', 'exports', 'fichier', 'facture', 'factures', 'cacheLire', 'lire']);
+const RELECTURE = new Set(['ping', 'aTraiter', 'exports', 'fichier', 'facture', 'factures', 'cacheLire', 'lire', 'invEtat', 'invLire', 'invProduits', 'invEnvoyer']);
 /** Appel au script ; une lecture qui échoue (réseau, délai) est retentée une fois avant d'abandonner. */
 export async function appel(action, donnees = {}, cfg = config) {
   try { return await appel1(action, donnees, cfg); }
@@ -46,11 +51,12 @@ async function appel1(action, donnees = {}, cfg = config) {
     const r = await fetch(cfg.url, {
       method: 'POST', redirect: 'follow', signal: ctl.signal,
       headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-      body: JSON.stringify({ ...donnees, action, ...(cfg.cle ? { cle: cfg.cle } : cfg.jeton ? { jeton: cfg.jeton } : {}) })
+      body: JSON.stringify({ ...donnees, action, ...(cfg.cle ? { cle: cfg.cle } : cfg.jetonInv ? { jetonInv: cfg.jetonInv } : cfg.jeton ? { jeton: cfg.jeton } : {}) })
     });
     if (!r.ok) throw new Error('le Drive ne répond pas (' + r.status + ')');
     const rep = await r.json();
     if (cfg.jeton && rep && rep.ok === false && rep.invite === 'fini' && quandInviteFini) quandInviteFini();
+    if (cfg.jetonInv && rep && rep.ok === false && rep.inventaire === 'fini' && quandInventaireFini) quandInventaireFini();
     if (log) console.log(`[V2/ATraiter] réponse « ${action} » : ok=${rep && rep.ok}${rep && rep.erreur ? ' erreur=' + rep.erreur : ''}`);
     return rep;
   } catch (x) {
@@ -105,7 +111,7 @@ export async function testerScript() {
     const r = await appel('ping');
     if (!r || !r.ok) return { ok: false, message: 'Le script ne répond pas ou ne connaît pas l\'action ping. Recopie Code.gs et redéploie (Nouvelle version).' };
     const v = Number(r.version) || 0;
-    if (v >= VERSION_SCRIPT_MIN && v < 6) return { ok: true, version: v, message: `Le script répond (version ${v}). La version 6 ouvre les factures bien plus vite : recopie Code.gs et redéploie (Nouvelle version).` };
+    if (v >= VERSION_SCRIPT_MIN && v < 7) return { ok: true, version: v, message: `Le script répond (version ${v}). La version 7 ouvre les factures plus vite et permet l'inventaire connecté : recopie Code.gs et redéploie (Nouvelle version).` };
     if (v < VERSION_SCRIPT_MIN) return { ok: false, version: v, message: `Le script répond mais il est ancien (version ${v}, il faut la ${VERSION_SCRIPT_MIN}). Recopie Code.gs et redéploie (Nouvelle version).` };
     return { ok: true, version: v, message: `Le script répond (version ${v}).` };
   } catch (x) {
@@ -143,6 +149,27 @@ export async function validerCode(url, demande, code) {
   await ecrire('drive', config);
   return config;
 }
+// ---------- inventaire connecté (lot 7) ----------
+// Lien d'inventaire : même principe que l'invitation (#inventaire=<adresse /exec>), le code du jour s'affiche chez le gérant.
+export function lienInventaire() { return estAdmin() ? `${location.origin}${location.pathname}#inventaire=${b64(config.url)}` : ''; }
+export function urlInventaireDuLien(hash = location.hash) {
+  const m = /[#&]inventaire=([\w-]+)/.exec(hash || ''); if (!m) return '';
+  try { const u = deb64(m[1]); return urlValide(u) ? u : ''; } catch (x) { return ''; }
+}
+export async function entrerInventaire(url, code, prenom) {
+  const r = await appel('invEntrer', { code, prenom }, { url });
+  if (!r.ok) throw new Error(r.erreur || 'code refusé');
+  config = { url, jetonInv: r.jeton, fin: r.fin, prenom: r.prenom, inv: r.inv, inventaire: true };
+  await ecrire('drive', config);
+  return config;
+}
+/** Appel d'inventaire : refus net (pas de session) = erreur lisible. */
+export async function appelInv(action, donnees = {}) {
+  const r = await appel(action, donnees);
+  if (!r || !r.ok) throw new Error((r && r.erreur) || 'refusé');
+  return r;
+}
+
 export async function arreterInvites() { const r = await appel('inviteArreter'); if (!r.ok) throw new Error('refusé'); return r.arretees || 0; }
 
 // ---------- exports StorePOS ----------

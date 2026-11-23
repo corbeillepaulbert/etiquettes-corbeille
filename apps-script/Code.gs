@@ -15,6 +15,9 @@
  * autorisation « Envoyer des e-mails en votre nom » (le code d'accès part sur l'adresse du compte du magasin,
  * ou sur la propriété MAIL_ADMIN si elle existe). Puis Déployer › Gérer les déploiements › Modifier › Nouvelle version.
  *
+ * INVENTAIRE CONNECTÉ (version 7) : recoller ce fichier, puis Déployer › Gérer les déploiements › Modifier › Nouvelle version.
+ * Aucune nouvelle autorisation : les inventoristes entrent avec le code du jour affiché sur l'écran du gérant (pas d'e-mail).
+ *
  * CHANGER LA CLÉ : écrire la nouvelle valeur dans la propriété CLE_NOUVELLE, puis exécuter rotationCle().
  * L'ancienne clé reste acceptée 7 jours, le temps de mettre à jour chaque appareil.
  *
@@ -24,7 +27,7 @@
  *  - Le secret n'apparaît jamais dans un journal ni dans une réponse.
  */
 
-const VERSION = 6;
+const VERSION = 7;
 const NOM_FACTURES = 'FACTURES ACHAT';
 const NOM_EXPORTS = 'EXPORTS STOREPOS';
 const NOM_APPLI = 'APPLI ETIQUETTES CORBEILLE';
@@ -43,6 +46,10 @@ const ESSAIS_CODE = 5;
 const DEMANDES_PAR_HEURE = 5;
 const ACTIONS_INVITE = new Set(['ping', 'exports', 'fichier']); // l'invité fait des étiquettes : il ne reçoit que les produits et leurs prix
 const DOCS_INVITE = new Set();
+// Inventaire (version 7) : un code du jour, affiché chez le gérant, ouvre une session jusqu'à minuit pour compter.
+const DUREE_CODE_INV_MS = 30 * 60e3;
+const ECHECS_INV_MAX = 15;                // codes faux acceptés par quart d'heure, tous téléphones confondus
+const ACTIONS_INVENTAIRE = new Set(['ping', 'invEtat', 'invProduits', 'invEnvoyer', 'invLire']);
 const EXTENSIONS_FACTURE = /\.(pdf|jpe?g|png|heic)$/i;
 const EXTENSIONS_EXPORT = /\.(xlsx|csv|txt)$/i;
 
@@ -57,9 +64,14 @@ function doPost(e) {
     // Deux seules actions sans clé : demander un code invité, et l'échanger contre une session de 6 h.
     if (req.action === 'inviteDemande') return repondre(inviteDemande(req.nom));
     if (req.action === 'inviteValider') return repondre(inviteValider(req.demande, req.code));
+    if (req.action === 'invEntrer') return repondre(invEntrer(req.code, req.prenom));
   } catch (x) { return repondre({ ok: false, erreur: 'réessaie dans un instant' }); }
-  let invite = null;
-  if (req.jeton) {
+  let invite = null, inventoriste = null;
+  if (req.jetonInv) {
+    inventoriste = sessionInventaire(req.jetonInv);
+    if (!inventoriste) return repondre({ ok: false, inventaire: 'fini' });
+    if (!ACTIONS_INVENTAIRE.has(req.action)) return repondre({ ok: false });
+  } else if (req.jeton) {
     invite = sessionInvite(req.jeton);
     if (!invite) return repondre({ ok: false, invite: 'fini' }); // session finie ou coupée : l'appli invitée s'efface
     if (!ACTIONS_INVITE.has(req.action)) return repondre({ ok: false });
@@ -67,7 +79,15 @@ function doPost(e) {
   } else if (!cleValide(req.cle)) return repondre({ ok: false });
   try {
     switch (req.action) {
-      case 'ping': return repondre(invite ? { ok: true, version: VERSION, invite: true, fin: invite.fin } : { ok: true, version: VERSION });
+      case 'ping': return repondre(inventoriste ? { ok: true, version: VERSION, inventaire: true, fin: inventoriste.fin } : invite ? { ok: true, version: VERSION, invite: true, fin: invite.fin } : { ok: true, version: VERSION });
+      case 'invOuvrir': return repondre(invOuvrir(req.inv, req.produits));
+      case 'invZones': return repondre(invZones(req.zones));
+      case 'invCode': return repondre(invCode());
+      case 'invFermer': return repondre(invFermer());
+      case 'invEtat': return repondre({ ok: true, inv: lireJson('inventaire.json', null) });
+      case 'invProduits': return repondre({ ok: true, produits: lireJson('inventaire-produits.json', []) });
+      case 'invEnvoyer': return repondre(invEnvoyer(req.appareil, req.lignes, inventoriste ? inventoriste.prenom : 'Gérant'));
+      case 'invLire': return repondre(invLire(req.depuis));
       case 'inviteArreter': return repondre(arreterInvites());
       case 'aTraiter': return repondre({ ok: true, ...lireATraiter() });
       case 'rafraichir': return repondre({ ok: true, ...rafraichir() });
@@ -498,11 +518,128 @@ function arreterInvites() {
   return { ok: true, arretees: n };
 }
 
+// ---------------------------------------------------------------- inventaire connecté (version 7)
+// Tout s'écrit dans APPLI V2 : inventaire.json (zones), inventaire-produits.json (codes et noms, sans aucun prix),
+// et un fichier de comptages par téléphone (inv-<inventaire>-<appareil>.json) : deux téléphones n'écrivent jamais le même fichier.
+// Code et jetons : empreintes SHA-256 dans les propriétés du script.
+
+const nettoyerTexte = (t, n) => String(t || '').replace(/[^\p{L}\p{N} '.,()&/+-]/gu, '').replace(/\s+/g, ' ').trim().slice(0, n);
+function finDeJournee() {
+  const j = Utilities.formatDate(new Date(), 'Europe/Paris', 'yyyy-MM-dd');
+  const fin = new Date(j + 'T23:59:00+01:00').getTime();
+  return fin > Date.now() ? fin : Date.now() + 3600e3;
+}
+function zonesPropres(zones) {
+  const z = (Array.isArray(zones) ? zones : []).slice(0, 200).map(x => ({ id: nettoyerTexte(x.id, 20), nom: nettoyerTexte(x.nom, 40), parent: nettoyerTexte(x.parent || '', 20) })).filter(x => x.id && x.nom);
+  return z;
+}
+/** Le gérant ouvre (ou rouvre) l'inventaire : zones et liste des produits (code-barres et nom seulement). */
+function invOuvrir(inv, produits) {
+  const verrou = LockService.getScriptLock(); verrou.waitLock(30000);
+  try {
+    const id = nettoyerTexte(inv && inv.id, 20); if (!/^[A-Za-z0-9-]{4,20}$/.test(id)) return { ok: false, erreur: 'inventaire sans identifiant' };
+    const avant = lireJson('inventaire.json', null);
+    const doc = { id, nom: nettoyerTexte(inv.nom, 60) || 'Inventaire', debut: avant && avant.id === id ? avant.debut : new Date().toISOString(), zones: zonesPropres(inv.zones), ferme: false, maj: new Date().toISOString() };
+    ecrireJson('inventaire.json', doc);
+    if (Array.isArray(produits)) ecrireJson('inventaire-produits.json', produits.slice(0, 20000).map(p => [String(p[0]).replace(/\D/g, '').slice(0, 14), nettoyerTexte(p[1], 60)]).filter(p => p[0]));
+    if (!avant || avant.id !== id) props().deleteProperty('INV_APPAREILS');
+    return { ok: true, inv: doc };
+  } finally { verrou.releaseLock(); }
+}
+function invZones(zones) {
+  const verrou = LockService.getScriptLock(); verrou.waitLock(30000);
+  try {
+    const doc = lireJson('inventaire.json', null); if (!doc) return { ok: false, erreur: 'pas d\'inventaire ouvert' };
+    doc.zones = zonesPropres(zones); doc.maj = new Date().toISOString(); ecrireJson('inventaire.json', doc);
+    return { ok: true, inv: doc };
+  } finally { verrou.releaseLock(); }
+}
+/** Nouveau code du jour : 6 chiffres, valable 30 minutes pour entrer. Renvoyé au gérant seulement (appel avec la clé). */
+function invCode() {
+  const doc = lireJson('inventaire.json', null); if (!doc || doc.ferme) return { ok: false, erreur: 'pas d\'inventaire ouvert' };
+  const code = String(parseInt(Utilities.getUuid().replace(/-/g, '').slice(0, 12), 16) % 1000000).padStart(6, '0');
+  const exp = Date.now() + DUREE_CODE_INV_MS;
+  ecrireProp('INV_CODE', { h: empreinte('inv' + code), exp, inv: doc.id });
+  return { ok: true, code, exp };
+}
+/** Un inventoriste tape le code du jour et son prénom : session jusqu'à minuit. */
+function invEntrer(code, prenom) {
+  const verrou = LockService.getScriptLock(); verrou.waitLock(30000);
+  try {
+    const m = Date.now();
+    const echecs = lireProp('INV_ECHECS', []).filter(t => m - t < 15 * 60e3);
+    if (echecs.length >= ECHECS_INV_MAX) return { ok: false, erreur: 'trop d\'essais : attends un quart d\'heure' };
+    const c = lireProp('INV_CODE', null), qui = nettoyerTexte(prenom, 30);
+    if (!qui) return { ok: false, erreur: 'écris ton prénom' };
+    if (!c || c.exp < m || !egalTempsConstant(empreinte('inv' + String(code || '').replace(/\D/g, '')), c.h)) {
+      echecs.push(m); ecrireProp('INV_ECHECS', echecs);
+      return { ok: false, erreur: c && c.exp < m ? 'code expiré : demande le nouveau code au gérant' : 'code faux' };
+    }
+    const jeton = Utilities.getUuid().replace(/-/g, '') + Utilities.getUuid().replace(/-/g, '');
+    const fin = finDeJournee();
+    const s = purgerSessions(lireProp('INV_SESSIONS', {}));
+    s[empreinte(jeton)] = { fin, prenom: qui, inv: c.inv };
+    ecrireProp('INV_SESSIONS', s);
+    return { ok: true, jeton, fin, prenom: qui, inv: c.inv };
+  } finally { verrou.releaseLock(); }
+}
+function sessionInventaire(jeton) {
+  if (!/^[a-f0-9]{64}$/.test(String(jeton || ''))) return null;
+  const s = lireProp('INV_SESSIONS', {})[empreinte(jeton)];
+  if (!s || s.fin <= Date.now()) return null;
+  const doc = lireJson('inventaire.json', null);
+  return doc && !doc.ferme && doc.id === s.inv ? s : null;
+}
+const ligneValide = l => l && /^[A-Za-z0-9-]{8,40}$/.test(String(l.id)) && /^\d{4,14}$/.test(String(l.e)) && Number.isInteger(l.q) && l.q >= 0 && l.q <= 99999;
+/** Les comptages d'un téléphone : ajoutés à son propre fichier, sans doublon (un paquet renvoyé deux fois ne compte qu'une fois). */
+function invEnvoyer(appareil, lignes, qui) {
+  if (!/^[a-z0-9]{8,40}$/.test(String(appareil || ''))) return { ok: false, erreur: 'appareil inconnu' };
+  const doc = lireJson('inventaire.json', null); if (!doc || doc.ferme) return { ok: false, erreur: 'inventaire fermé' };
+  const nom = 'inv-' + doc.id + '-' + appareil + '.json';
+  const verrou = LockService.getScriptLock(); verrou.waitLock(30000);
+  try {
+    const apps = lireProp('INV_APPAREILS', []); if (apps.indexOf(appareil) < 0) { apps.push(appareil); ecrireProp('INV_APPAREILS', apps.slice(-200)); }
+    const f = lireJson(nom, { qui, lignes: [] }), vus = {};
+    f.lignes.forEach(l => { vus[l.id] = 1; });
+    let n = 0;
+    for (const l of (Array.isArray(lignes) ? lignes : []).slice(0, 500)) {
+      if (!ligneValide(l) || vus[l.id]) continue;
+      f.lignes.push({ id: String(l.id), e: String(l.e), q: l.q, z: nettoyerTexte(l.z, 20), t: String(l.t || new Date().toISOString()).slice(0, 30), qui, rem: l.rem ? String(l.rem).slice(0, 40) : undefined, ann: l.ann ? String(l.ann).slice(0, 40) : undefined });
+      vus[l.id] = 1; n++;
+    }
+    f.qui = qui;
+    if (n) ecrireJson(nom, f);
+    return { ok: true, ajoutees: n, total: f.lignes.length };
+  } finally { verrou.releaseLock(); }
+}
+/** Tous les comptages, téléphone par téléphone ; `depuis` = { appareil: nombre déjà reçu } pour ne renvoyer que la suite. */
+function invLire(depuis) {
+  const doc = lireJson('inventaire.json', null); if (!doc) return { ok: true, inv: null, appareils: {} };
+  const out = {}, d = depuis || {};
+  for (const a of lireProp('INV_APPAREILS', [])) {
+    const f = lireJson('inv-' + doc.id + '-' + a + '.json', null); if (!f) continue;
+    const n = Math.max(0, Number(d[a]) || 0);
+    out[a] = { qui: f.qui, total: f.lignes.length, lignes: f.lignes.slice(n) };
+  }
+  return { ok: true, inv: doc, appareils: out };
+}
+/** Clôture : plus personne n'entre ni ne compte. Les fichiers restent dans APPLI V2. */
+function invFermer() {
+  const verrou = LockService.getScriptLock(); verrou.waitLock(30000);
+  try {
+    const doc = lireJson('inventaire.json', null);
+    if (doc) { doc.ferme = true; doc.fin = new Date().toISOString(); ecrireJson('inventaire.json', doc); }
+    props().deleteProperty('INV_SESSIONS'); props().deleteProperty('INV_CODE');
+    return { ok: true };
+  } finally { verrou.releaseLock(); }
+}
+
 // ---------------------------------------------------------------- installation et déclencheur
 
 function passage15min() {
   purgerClePrecedente();
   try { const s = lireProp('INVITE_SESSIONS', null); if (s) ecrireProp('INVITE_SESSIONS', purgerSessions(s)); } catch (x) { }
+  try { const s = lireProp('INV_SESSIONS', null); if (s) ecrireProp('INV_SESSIONS', purgerSessions(s)); } catch (x) { }
   const verrou = LockService.getScriptLock();
   if (!verrou.tryLock(1000)) return;
   try { chercherFactures(); } finally { verrou.releaseLock(); }
