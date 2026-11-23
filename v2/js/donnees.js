@@ -71,6 +71,11 @@ export function siImport(fn) { SURIMPORT.push(fn); }
 
 export function joursVentes() { return etat.meta.ventes?.jours || 365; }
 
+// Exports nommés sans dates (« RAMADAN 2024 ») : le module qui connaît ces noms donne la période (ramadan.js).
+let NOMMEES = null;
+export function siPeriodeNommee(fn) { NOMMEES = fn; }
+const nomRamadan = nom => /RAMADAN/i.test(nom);
+
 /** Période d'un fichier de ventes, lue dans son nom (même règle que la V1). */
 export function periodeDepuisNom(nom) {
   const m = nom.match(/(\d{2})[_.-](\d{2})[_.-](\d{2,4})[_ .-]+(?:au[_ .-]+)?(\d{2})[_.-](\d{2})[_.-](\d{2,4})/i);
@@ -107,8 +112,11 @@ export async function importerFichier(file, origine = {}) {
   const cCA = type === 'ventes' ? findCol(h, ['Chiffre affaire (TTC)', 'CA TTC']) : -1;
   const cMV = type === 'ventes' ? findCol(h, ['marge valeur']) : -1;
   // Ventes : un fichier d'un an (ou plus) est la référence des fiches ; un fichier plus court (4 semaines, un Ramadan…) est rangé à part comme « période ».
-  const per = type === 'ventes' ? periodeDepuisNom(file.name) : null;
-  const principal = type === 'base' || !per.du || per.jours >= 300 || !etat.meta.ventes;
+  let per = type === 'ventes' ? periodeDepuisNom(file.name) : null;
+  if (per && !per.du && NOMMEES) per = (await NOMMEES(file.name)) || per;
+  if (type === 'ventes' && nomRamadan(file.name) && !per.du) throw new Error("pas de Ramadan connu pour cette année dans le nom (ex. RAMADAN 2024)");
+  // un export de Ramadan n'est jamais la référence des ventes, même si c'est le premier reçu
+  const principal = type === 'base' || ((!per.du || per.jours >= 300 || !etat.meta.ventes) && !nomRamadan(file.name));
   const qm = {}, cam = {}; let caTot = 0, mvTot = 0, mvN = 0;
   const P = { ...etat.produits };
   const vus = new Set();
@@ -150,8 +158,8 @@ export async function importerFichier(file, origine = {}) {
     // les produits absents du nouveau fichier n'ont pas vendu sur la période
     for (const e of Object.keys(P)) if (!vus.has(e)) P[e] = { ...P[e], q: 0 };
   }
-  for (const f of SURIMPORT) { try { await f({ type, avant: etat.produits, apres: P, premier: !etat.meta[type], jours: type === 'ventes' ? periodeDepuisNom(file.name).jours : undefined }); } catch (x) { console.error('[V2/Import] suite :', x.message); } }
-  const meta = { ...etat.meta, [type]: { nom: file.name, lignes: n, v: 3, date: new Date().toISOString(), ...origine, ...(type === 'ventes' ? periodeDepuisNom(file.name) : {}) } };
+  for (const f of SURIMPORT) { try { await f({ type, avant: etat.produits, apres: P, premier: !etat.meta[type], jours: type === 'ventes' ? per.jours : undefined }); } catch (x) { console.error('[V2/Import] suite :', x.message); } }
+  const meta = { ...etat.meta, [type]: { nom: file.name, lignes: n, v: 3, date: new Date().toISOString(), ...origine, ...(type === 'ventes' ? per : {}) } };
   await ecrire('produits', P); await ecrire('meta', meta);
   etat.produits = P; etat.meta = meta;
   try { navigator.storage && navigator.storage.persist && navigator.storage.persist(); } catch (e) { }
