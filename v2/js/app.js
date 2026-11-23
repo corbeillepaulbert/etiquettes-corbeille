@@ -20,6 +20,10 @@ import { chargerLectures, chargerCache, lirePremieres } from './lectures.js';
 import { chargerConfig, estRelie, relier, delier, aTraiterEnCache, majATraiter, rafraichirMaintenant, marquerTraite, prendreExports, synchroniserListe, fichierFacture, testerScript, envoyerMarques, estInvite, finInvite, nomInvite, estAdmin, urlDuLien, urlValide, demanderCode, validerCode, arreterInvites, lienInvitation, siInviteFini } from './drive.js';
 import { ecranAccueilInvite, ecranDemandeInvite, ecranInviteFini, blocInviter, resteInvite } from './invite.js';
 import { toutEffacer } from './donnees.js';
+import { aRefaire } from './refaire.js';
+import { chargerNoms, actionNoms, nbNomsARevoir } from './noms.js';
+import { actionPrix, nbPrixARevoir } from './prix.js';
+import { actionHebdo } from './hebdo.js';
 
 const app = document.getElementById('app');
 const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
@@ -68,11 +72,12 @@ async function accueil() {
       </div></div>`, 'accueil');
     return;
   }
-  const ram = await tuileRamadan();
+  const ram = await tuileRamadan(), refaire = aRefaire().length, lundi = new Date().getDay() === 1;
   afficher(ecranAccueil({
-    extra: `<button class="tuile tuile--fl" data-action="affiches">${icone('fruit')}<div><b>Fruits et légumes</b><span>Affiches et fiche de caisse</span></div></button>` + ram,
+    extra: `<button class="tuile tuile--fl" data-action="affiches">${icone('fruit')}<div><b>Fruits et légumes</b><span>Affiches et fiche de caisse</span></div></button>` + ram
+      + `<button class="tuile tuile--semaine" data-action="hebdo">${icone('semaine')}<div><b>Point de la semaine</b><span>${lundi ? "C'est lundi : dépose l'export des 7 derniers jours" : 'Ventes, achats et à faire des 7 derniers jours'}</span></div></button>`,
     bonjour: 'Bonjour', date: dateDuJour(), aTraiter: nouveaux(), donnees: resumeDonnees(),
-    petites: [['etiquettes', 'imprimer', 'Étiquettes'], ['factures', 'facture', 'Travailler une facture'], ['liste', 'achat', `Ma liste d'achat${etat.liste.length ? ` (${etat.liste.length})` : ''}`]],
+    petites: [['etiquettes', 'imprimer', `Étiquettes${refaire ? ` (${refaire} à refaire)` : ''}`], ['factures', 'facture', 'Travailler une facture'], ['liste', 'achat', `Ma liste d'achat${etat.liste.length ? ` (${etat.liste.length})` : ''}`]],
     liens: [['inconnus', `Produits inconnus${aIdentifier().length ? ` (${aIdentifier().length})` : ''}`], ['donnees', 'Mettre à jour les ventes'], ['reglages', 'Réglages']]
   }), 'accueil');
 }
@@ -93,6 +98,8 @@ async function ouvrirMode(m) {
     ${p ? `<button class="ligne" data-action="ouvrir-fiche" data-e="${esc(p.e)}" style="border:0;font:inherit;text-align:left;width:100%"><div class="ligne__ico">${icone(m)}</div><div class="ligne__txt"><div class="ligne__titre">${esc(joli(p.lib))}</div><div class="ligne__detail">Dernière fiche · ${euros(p.prix)}</div></div></button>` : ''}
     ${m === 'achat' ? `<button class="ligne" data-action="conseil" style="border:0;font:inherit;text-align:left;width:100%"><div class="ligne__ico">${icone('courbe')}</div><div class="ligne__txt"><div class="ligne__titre">Conseil d'achat</div><div class="ligne__detail">Ce qu'il faut prendre chez chaque fournisseur</div></div></button>
       <button class="ligne" data-action="ramadan" style="border:0;font:inherit;text-align:left;width:100%"><div class="ligne__ico">${icone('agenda')}</div><div class="ligne__txt"><div class="ligne__titre">Préparer le Ramadan</div><div class="ligne__detail">Ramadan à Ramadan, avec les dates limites</div></div></button>` : ''}
+ ${m === 'magasin' ? (n => `<button class="ligne" data-action="prix" style="border:0;font:inherit;text-align:left;width:100%"><div class="ligne__ico">${icone('euro')}</div><div class="ligne__txt"><div class="ligne__titre">Prix à revoir${n ? ` (${n})` : ''}</div><div class="ligne__detail">Hausses d'achat et marges sous 25 %</div></div></button>
+      <button class="ligne" data-action="hebdo" style="border:0;font:inherit;text-align:left;width:100%"><div class="ligne__ico">${icone('semaine')}</div><div class="ligne__txt"><div class="ligne__titre">Point de la semaine</div><div class="ligne__detail">Les 7 derniers jours</div></div></button>`)(nbPrixARevoir()) : ''}
     ${m === 'achat' ? `<button class="ligne" data-action="liste" style="border:0;font:inherit;text-align:left;width:100%"><div class="ligne__ico">${icone('achat')}</div><div class="ligne__txt"><div class="ligne__titre">Ma liste d'achat</div><div class="ligne__detail">${etat.liste.length ? etat.liste.length + ' produit(s)' : 'Vide pour l\'instant'}</div></div></button>` : ''}
     </div>
   </div>
@@ -273,6 +280,7 @@ function toast(texte, annuler) {
 }
 
 // ---------- actions ----------
+const donneesHebdo = () => ({ elements: vueAT().gardes, aFaire: [['a-traiter', 'Factures à traiter', nouveaux()], ['inconnus', 'Produits inconnus', aIdentifier().length], ['etiq-refaire-voir', 'Étiquettes à refaire', aRefaire().length], ['prix', 'Prix à revoir', nbPrixARevoir()], ['noms', "Noms d'étiquette à revoir", nbNomsARevoir()]] });
 const nav = { afficher: (h, n) => afficher(h, n), toast: (t, f) => toast(t, f), donnees: m => donnees(m), sync: () => syncFond(true), reglages: () => reglages(), accueil: () => accueil() };
 app.addEventListener('click', async e => {
   const b = e.target.closest('[data-action]'); if (!b) return;
@@ -287,6 +295,9 @@ app.addEventListener('click', async e => {
   if (await actionAffiches(a, b, nav)) return;
   if (await actionFacture(a, b, nav)) return;
   if (estInvite() && INTERDIT_INVITE.test(a)) { console.warn('[V2/Invité] action refusée :', a); return accueil(); }
+  if (await actionNoms(a, b, nav)) return;
+  if (await actionPrix(a, b, nav)) return;
+  if (await actionHebdo(a, b, nav, donneesHebdo)) return;
   if (a === 'accueil') return accueil();
   if (a === 'invite-ouvrir') { afficher(ecranDemandeInvite({ etape: 1, nom: await lire('inviteNom', '') }), 'invite'); return; }
   if (a === 'invite-demander' || a === 'invite-renvoyer') {
@@ -442,7 +453,7 @@ ecouterDouchette(code => { if (!document.querySelector('.scan-plein')) resultat(
 
 // ---------- mode invité : fin de session ----------
 // L'invité ne fait que des étiquettes : tout le reste est refusé (et le serveur ne lui donne que les produits).
-const INTERDIT_INVITE = /^(factures|fac-.*|a-traiter|at-.*|rafraichir|traite|reglages|fin-reglages|relier|delier|tester-script|donnees|exports-drive|reprendre-v1|mode|scanner|scanner-achat|liste|ouvrir-fiche|vider|retirer|affiches|af-.*|inconnus|inc-.*|caisse-.*|conseil|cons-.*|besoins-.*|ramadan|ram-.*|invite-lien|invite-arreter)$/;
+const INTERDIT_INVITE = /^(noms|nom-.*|prix|prix-.*|hebdo|etiq-refaire-.*|factures|fac-.*|a-traiter|at-.*|rafraichir|traite|reglages|fin-reglages|relier|delier|tester-script|donnees|exports-drive|reprendre-v1|mode|scanner|scanner-achat|liste|ouvrir-fiche|vider|retirer|affiches|af-.*|inconnus|inc-.*|caisse-.*|conseil|cons-.*|besoins-.*|ramadan|ram-.*|invite-lien|invite-arreter)$/;
 let minuteurInvite = null;
 function surveillerInvite() {
   clearInterval(minuteurInvite);
@@ -502,6 +513,7 @@ document.addEventListener('visibilitychange', () => { if (document.visibilitySta
   if (estInvite() && finInvite() <= Date.now()) { await terminerInvite(); return; }
   if (estInvite()) surveillerInvite();
   await chargerEtiquettes();
+  await chargerNoms();
   await chargerFacture();
   await chargerAffiches();
   await chargerConseil();

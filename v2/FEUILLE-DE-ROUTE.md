@@ -14,6 +14,7 @@ Mise à jour du 21/11/2026. Chaque lot s'utilise seul ; la V1 reste en productio
 | 2b | Affiches fruits et légumes, 4 formats identiques à la V1 | #10 |
 | 5 | Produits inconnus (file partagée, OpenFoodFacts, création de fiche mode 3) et mode caisse avec PIN | #12 |
 | 6 | Conseil d'achat par fournisseur ; exports datés demandés avec leurs dates exactes | #13 |
+| 9-12 | Étiquettes à refaire, noms d'étiquette, prix à revoir, point de la semaine (Vente PLU des 7 derniers jours à la place d'un export « CA par jour ») | lots 9 à 12 |
 | 8 | Mode Ramadan : Ramadan à Ramadan depuis 2023, tendance, dates limites, tuile à J-30 | #15 |
 | — | Correctifs de la fiche de tests du 21/11 : prix unitaires Metro (lots, prix au kilo, cartons), À traiter plus rapide (script v6), « Traitée » qui ne disparaît plus, zoom aux doigts, étiquettes au doigt, tuile Fruits et légumes, factures Agrifresh dans les affiches | #16 |
 
@@ -45,10 +46,10 @@ Mise à jour du 21/11/2026. Chaque lot s'utilise seul ; la V1 reste en productio
 
 | Lot | Contenu | État |
 | --- | --- | --- |
-| 9 | **Étiquettes intelligentes** : l'appli retient le prix imprimé de chaque étiquette ; à chaque export produits, « N étiquettes à refaire » avec la planche prête. Ajout automatique des prix changés par une facture, des fiches créées et des passages en (ou hors) « Top vente ». | à faire |
-| 10 | **Refonte du nom produit** : nom court et lisible pour l'étiquette (produit, marque, poids), proposé depuis le nom en caisse et OpenFoodFacts, validé d'un geste, repris sur toutes les étiquettes. | à faire |
-| 11 | **Propositions de changement de prix** : après une facture, les hausses de prix d'achat avec le prix suggéré (règle V1) ; sur tout le catalogue, les produits sous 25 % de marge, classés par manque à gagner ; « Prendre » par ligne, un seul fichier d'import, étiquettes ajoutées. | à faire |
-| 12 | **Point hebdo sur 7 jours glissants** : achats des 7 jours (factures du Drive, sans export) ; ventes des 7 jours avec un seul petit export par semaine (chiffre d'affaires par jour, demandé le lundi avec ses dates) ; meilleures ventes du dernier gros export, date affichée ; à faire de la semaine (factures, inconnus, étiquettes à refaire, prix à revoir). | à faire |
+| 9 | **Étiquettes intelligentes** : l'appli retient le prix imprimé de chaque étiquette ; à chaque export produits, « N étiquettes à refaire » avec la planche prête. Ajout automatique des prix changés par une facture, des fiches créées et des passages en (ou hors) « Top vente ». | fait (lots 9 à 12) |
+| 10 | **Refonte du nom produit** : nom court et lisible pour l'étiquette (produit, marque, poids), proposé depuis le nom en caisse et OpenFoodFacts, validé d'un geste, repris sur toutes les étiquettes. | fait (lots 9 à 12) |
+| 11 | **Propositions de changement de prix** : après une facture, les hausses de prix d'achat avec le prix suggéré (règle V1) ; sur tout le catalogue, les produits sous 25 % de marge, classés par manque à gagner ; « Prendre » par ligne, un seul fichier d'import, étiquettes ajoutées. | fait (lots 9 à 12) |
+| 12 | **Point hebdo sur 7 jours glissants** : achats des 7 jours (factures du Drive, sans export) ; ventes des 7 jours avec un seul petit export par semaine (chiffre d'affaires par jour, demandé le lundi avec ses dates) ; meilleures ventes du dernier gros export, date affichée ; à faire de la semaine (factures, inconnus, étiquettes à refaire, prix à revoir). | fait (lots 9 à 12) |
 | 3 (fin) | Réception : factures des grossistes en libre-service (Metro, Promocash) reconnues | à faire |
 | 4 | Fichier d'import StorePOS complet (modes 1/2/3 pour toutes les fiches, pas seulement les inconnus) | à faire |
 | — | PILOT dans l'appli : nom, icône, couleur indigo (si validé) | à décider |
