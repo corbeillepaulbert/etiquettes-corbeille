@@ -18,6 +18,11 @@
  * INVENTAIRE CONNECTÉ (version 7) : recoller ce fichier, puis Déployer › Gérer les déploiements › Modifier › Nouvelle version.
  * Aucune nouvelle autorisation : les inventoristes entrent avec le code du jour affiché sur l'écran du gérant (pas d'e-mail).
  *
+ * VENTES NF525 (version 8) : recoller ce fichier, redéployer (Nouvelle version). Le script lit, en lecture seule, le dossier
+ * SAUVEGARDES STOREPOS › NF525 › DONNEES_ANALYSE (rempli chaque matin par le PC du magasin) et range un résumé des ventes
+ * par jour et par produit dans APPLI V2 (fichiers jours-AAAAMM.json). Le premier passage prépare tout l'historique en quelques
+ * passages du déclencheur de 15 minutes. SAUVEFISCAL (archives légales) n'est jamais ouvert.
+ *
  * CHANGER LA CLÉ : écrire la nouvelle valeur dans la propriété CLE_NOUVELLE, puis exécuter rotationCle().
  * L'ancienne clé reste acceptée 7 jours, le temps de mettre à jour chaque appareil.
  *
@@ -27,7 +32,7 @@
  *  - Le secret n'apparaît jamais dans un journal ni dans une réponse.
  */
 
-const VERSION = 7;
+const VERSION = 8;
 const NOM_FACTURES = 'FACTURES ACHAT';
 const NOM_EXPORTS = 'EXPORTS STOREPOS';
 const NOM_APPLI = 'APPLI ETIQUETTES CORBEILLE';
@@ -50,6 +55,9 @@ const DOCS_INVITE = new Set();
 const DUREE_CODE_INV_MS = 30 * 60e3;
 const ECHECS_INV_MAX = 15;                // codes faux acceptés par quart d'heure, tous téléphones confondus
 const ACTIONS_INVENTAIRE = new Set(['ping', 'invEtat', 'invProduits', 'invEnvoyer', 'invLire']);
+// Ventes NF525 (version 8) : lecture seule de DONNEES_ANALYSE, résumé par jour et par produit dans APPLI V2.
+const NOMS_ANALYSE = ['SAUVEGARDES STOREPOS', 'NF525', 'DONNEES_ANALYSE'];
+const MOIS_LIGNES = /^LIGNES_TICKETS_(\d{6})\.txt$/;
 const EXTENSIONS_FACTURE = /\.(pdf|jpe?g|png|heic)$/i;
 const EXTENSIONS_EXPORT = /\.(xlsx|csv|txt)$/i;
 
@@ -98,6 +106,7 @@ function doPost(e) {
       case 'facture': return repondre({ ok: true, ...lireFacture(req.id) });
       case 'cacheLire': return repondre({ ok: true, cache: lireCacheFactures(req.ids) });
       case 'cacheEcrire': return repondre(ecrireCacheFacture(req.id, req.fournisseur, req.montant, req.nb));
+      case 'ventes': return repondre(ventes(req.periodes));
       case 'lire': return repondre({ ok: true, ...lireDoc(req.doc) });
       case 'ecrire': return repondre(ecrireDoc(req.doc, req.valeur, req.version));
       default: return repondre({ ok: false, erreur: 'action inconnue' });
@@ -634,6 +643,99 @@ function invFermer() {
   } finally { verrou.releaseLock(); }
 }
 
+// ---------------------------------------------------------------- ventes NF525 (version 8)
+// DONNEES_ANALYSE est en LECTURE SEULE (comme EXPORTS STOREPOS) : getFoldersByName, getFiles, getName, getId, getLastUpdated, getBlob.
+// Le résumé jours-AAAAMM.json (APPLI V2) donne, pour chaque jour du mois, [quantité, CA TTC] par code-barres. La quantité est
+// la « quantité mesure » (champ 16 : kg pour les pesées), comme l'export Vente PLU ; les retours (type 2) sont négatifs et s'ajoutent tels quels.
+
+function dossierAnalyse() {
+  const id = props().getProperty('ID_ANALYSE');
+  if (id) { try { return DriveApp.getFolderById(id); } catch (x) { props().deleteProperty('ID_ANALYSE'); } }
+  let it = DriveApp.getFoldersByName(NOMS_ANALYSE[0]); if (!it.hasNext()) return null;
+  let d = it.next();
+  for (const n of NOMS_ANALYSE.slice(1)) { it = d.getFoldersByName(n); if (!it.hasNext()) return null; d = it.next(); }
+  props().setProperty('ID_ANALYSE', d.getId());
+  return d;
+}
+function fichiersMois() {
+  const d = dossierAnalyse(); if (!d) return [];
+  const it = d.getFoldersByName('LIGNES_PAR_MOIS'); if (!it.hasNext()) return [];
+  const out = [], f = it.next().getFiles();
+  while (f.hasNext()) { const x = f.next(), m = MOIS_LIGNES.exec(x.getName()); if (m) out.push({ mois: m[1], f: x, maj: x.getLastUpdated().toISOString() }); }
+  return out.sort((a, b) => a.mois.localeCompare(b.mois));
+}
+/** Une ligne de ticket → [jour, ean, quantité, CA TTC], ou null. */
+function ligneTicket(l) {
+  const c = l.split(';'); if (c.length < 24) return null;
+  const e = c[3].trim(), j = c[18].slice(0, 8), q = parseFloat(c[15]), ca = parseFloat(c[14]);
+  if (!e || !/^\d{8}$/.test(j) || isNaN(q) || isNaN(ca)) return null;
+  return [j, e, q, ca];
+}
+const arrondi = (x, n) => Math.round(x * Math.pow(10, n)) / Math.pow(10, n);
+/** Résume les mois nouveaux ou modifiés, dans la limite de `budgetMs`. Renvoie le nombre de mois encore à préparer. */
+function preparerJours(budgetMs) {
+  const t0 = Date.now(), etat = lireProp('VENTES_MOIS', {});
+  let reste = 0;
+  for (const m of fichiersMois()) {
+    if (etat[m.mois] === m.maj) continue;
+    if (Date.now() - t0 > budgetMs) { reste++; continue; }
+    const jours = {};
+    for (const l of m.f.getBlob().getDataAsString('windows-1252').split(/\r?\n/)) {
+      const x = ligneTicket(l); if (!x) continue;
+      const J = jours[x[0]] || (jours[x[0]] = {}), v = J[x[1]] || (J[x[1]] = [0, 0]);
+      v[0] += x[2]; v[1] += x[3];
+    }
+    for (const j of Object.keys(jours)) for (const e of Object.keys(jours[j])) { const v = jours[j][e]; v[0] = arrondi(v[0], 3); v[1] = arrondi(v[1], 2); }
+    ecrireJson('jours-' + m.mois + '.json', { mois: m.mois, maj: m.maj, jours });
+    etat[m.mois] = m.maj; ecrireProp('VENTES_MOIS', etat);
+  }
+  return reste;
+}
+/** CA officiel par jour : CA_JOUR_REGLEMENTS, complété par CA_JOUR_MENSUELLES pour les jours absents (une seule ligne par date). */
+function caJours() {
+  const d = dossierAnalyse(); if (!d) return [];
+  const lire = nom => { const it = d.getFilesByName(nom); return it.hasNext() ? it.next().getBlob().getDataAsString('UTF-8').split(/\r?\n/) : []; };
+  const par = {};
+  const ajouter = (lignes, mens) => {
+    const h = (lignes[0] || '').split(';'), ix = n => h.indexOf(n);
+    for (const l of lignes.slice(1)) {
+      const c = l.split(';'), j = c[ix('date')]; if (!/^\d{8}$/.test(j || '') || par[j]) continue;
+      const n = k => parseFloat(c[ix(k)]) || 0;
+      par[j] = [j, n('ca_ttc'), arrondi(n('especes') + n('rendu_monnaie'), 2), n('carte'), n('autres'), n('nb_tickets')];
+    }
+  };
+  ajouter(lire('CA_JOUR_REGLEMENTS.csv')); ajouter(lire('CA_JOUR_MENSUELLES.csv'));
+  return Object.keys(par).sort().map(j => par[j]);
+}
+const jourIso = j => j.slice(0, 4) + '-' + j.slice(4, 6) + '-' + j.slice(6, 8);
+const jourCompact = d => String(d).replace(/-/g, '');
+/** Ventes par produit pour chaque période demandée [{cle, du, au}] (dates AAAA-MM-JJ), à partir des résumés jours-AAAAMM.json.
+ *  Une période dont un mois n'est pas encore résumé n'est pas renvoyée (l'appli garde ses exports en attendant). */
+function ventes(periodes) {
+  const reste = preparerJours(20000), etat = lireProp('VENTES_MOIS', {});
+  const ca = caJours(), au = ca.length ? jourIso(ca[ca.length - 1][0]) : null, debut = ca.length ? jourIso(ca[0][0]) : null;
+  const caches = {}, out = {}, enAttente = [];
+  const mois = m => { if (!(m in caches)) caches[m] = etat[m] ? lireJson('jours-' + m + '.json', null) : null; return caches[m]; };
+  for (const p of (Array.isArray(periodes) ? periodes : []).slice(0, 20)) {
+    if (!p || !/^\d{4}-\d{2}-\d{2}$/.test(p.du) || !/^\d{4}-\d{2}-\d{2}$/.test(p.au) || p.au < p.du) continue;
+    const du = jourCompact(p.du), a = jourCompact(p.au), q = {}, c = {};
+    let complet = true, tot = 0;
+    for (let y = +du.slice(0, 4), m = +du.slice(4, 6); y * 100 + m <= +a.slice(0, 6); m === 12 ? (y++, m = 1) : m++) {
+      const k = String(y * 100 + m), M = mois(k);
+      if (!M) { if (k >= '202207' && (!debut || k <= jourCompact(au).slice(0, 6))) complet = false; continue; }
+      for (const j of Object.keys(M.jours)) {
+        if (j < du || j > a) continue;
+        const J = M.jours[j];
+        for (const e of Object.keys(J)) { q[e] = (q[e] || 0) + J[e][0]; c[e] = (c[e] || 0) + J[e][1]; tot += J[e][1]; }
+      }
+    }
+    if (!complet) { enAttente.push(String(p.cle)); continue; }
+    for (const e of Object.keys(q)) { q[e] = arrondi(q[e], 3); c[e] = arrondi(c[e], 2); }
+    out[String(p.cle).slice(0, 20)] = { du: p.du, au: p.au, q, ca: c, caTot: arrondi(tot, 2) };
+  }
+  return { ok: true, au, debut, moisPrets: Object.keys(etat).length, moisAPreparer: reste, enAttente, periodes: out, caJours: ca.slice(-800) };
+}
+
 // ---------------------------------------------------------------- installation et déclencheur
 
 function passage15min() {
@@ -643,6 +745,7 @@ function passage15min() {
   const verrou = LockService.getScriptLock();
   if (!verrou.tryLock(1000)) return;
   try { chercherFactures(); } finally { verrou.releaseLock(); }
+  try { preparerJours(120000); } catch (x) { console.error('ventes NF525 : ' + x.message); }
 }
 
 function installer() {

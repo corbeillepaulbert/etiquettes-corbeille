@@ -111,7 +111,7 @@ export async function testerScript() {
     const r = await appel('ping');
     if (!r || !r.ok) return { ok: false, message: 'Le script ne répond pas ou ne connaît pas l\'action ping. Recopie Code.gs et redéploie (Nouvelle version).' };
     const v = Number(r.version) || 0;
-    if (v >= VERSION_SCRIPT_MIN && v < 7) return { ok: true, version: v, message: `Le script répond (version ${v}). La version 7 ouvre les factures plus vite et permet l'inventaire connecté : recopie Code.gs et redéploie (Nouvelle version).` };
+    if (v >= VERSION_SCRIPT_MIN && v < 8) return { ok: true, version: v, message: `Le script répond (version ${v}). La version 8 lit les ventes dans les tickets de caisse (plus besoin d'export Vente PLU) : recopie Code.gs et redéploie (Nouvelle version).` };
     if (v < VERSION_SCRIPT_MIN) return { ok: false, version: v, message: `Le script répond mais il est ancien (version ${v}, il faut la ${VERSION_SCRIPT_MIN}). Recopie Code.gs et redéploie (Nouvelle version).` };
     return { ok: true, version: v, message: `Le script répond (version ${v}).` };
   } catch (x) {

@@ -253,3 +253,9 @@ html,body{margin:0;background:var(--papier)}
 .inv-touche--plus{background:var(--inventaire-clair);color:var(--inventaire);font-weight:800}
 .inv-qte{font:800 48px/1 var(--font-titre);font-variant-numeric:tabular-nums}
 .inv-code{font:800 56px/1 var(--font-titre);letter-spacing:4px;font-variant-numeric:tabular-nums;text-align:center}
+/* Ventes NF525 : grand affichage de l'accueil */
+.ventes-carte{display:grid;gap:var(--espace-1);cursor:pointer;color:var(--encre)}
+.ventes-ca{font:800 40px/1.1 var(--font-titre);font-variant-numeric:tabular-nums;display:flex;align-items:baseline;gap:var(--espace-3);flex-wrap:wrap}
+.ventes-ecart{font:700 20px/1 var(--font-texte);padding:var(--espace-1) var(--espace-2);border-radius:var(--rayon-plein)}
+.ventes-ecart--plus{background:var(--succes-fond);color:var(--succes)}
+.ventes-ecart--moins{background:var(--erreur-fond);color:var(--erreur)}

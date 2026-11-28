@@ -15,6 +15,7 @@ Mise à jour du 21/11/2026. Chaque lot s'utilise seul ; la V1 reste en productio
 | 5 | Produits inconnus (file partagée, OpenFoodFacts, création de fiche mode 3) et mode caisse avec PIN | #12 |
 | 6 | Conseil d'achat par fournisseur ; exports datés demandés avec leurs dates exactes | #13 |
 | 9-12 | Étiquettes à refaire, noms d'étiquette, prix à revoir, point de la semaine (Vente PLU des 7 derniers jours à la place d'un export « CA par jour ») | lots 9 à 12 |
+| NF525 | Ventes lues dans les tickets de caisse (script v8) : fiches, Conseil d'achat, Ramadan et point de la semaine sans export Vente PLU ; CA du dernier jour à l'accueil, comparé à l'an dernier | branche v2-nf525 |
 | 8 | Mode Ramadan : Ramadan à Ramadan depuis 2023, tendance, dates limites, tuile à J-30 | #15 |
 | — | Correctifs de la fiche de tests du 21/11 : prix unitaires Metro (lots, prix au kilo, cartons), À traiter plus rapide (script v6), « Traitée » qui ne disparaît plus, zoom aux doigts, étiquettes au doigt, tuile Fruits et légumes, factures Agrifresh dans les affiches | #16 |
 
@@ -57,6 +58,12 @@ Mise à jour du 21/11/2026. Chaque lot s'utilise seul ; la V1 reste en productio
 | — | Bascule : la V2 remplace la V1 à la racine, copie de la V1 gardée quelques semaines | après les tests iPhone |
 
 Idée de la maquette non retenue pour l'instant : dates courtes (alerte 10 jours avant la date limite).
+
+## Suite NF525 (après validation sur l'iPhone)
+- Fiche produit : courbe par semaine, même période l'an dernier, dernière date de vente.
+- Produits qui ne se vendent plus (dernière vente, baisse) et prix réellement pratiqué comparé au prix d'achat.
+- Affluence par heure (lignes de tickets) pour les plannings.
+- Inventaire (lot 7, partie 2) : oublis = produits vendus ces 24 derniers mois, stock de référence sur 30 jours et 12 mois, ventes de la semaine d'inventaire pour le recalage, sans export.
 
 ## Critères de succès
 

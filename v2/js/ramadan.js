@@ -2,7 +2,7 @@
 // grâce à un export Vente PLU par Ramadan passé (données fiables depuis 2023), nommé simplement « RAMADAN 2024 ».
 // Prévision = moyenne pondérée des Ramadans passés (le plus récent compte le plus), bornée par la date limite.
 // Décision du 23/11/2026 : plus de tendance sur les 4 dernières semaines, seulement les périodes de Ramadan.
-import { etat, lire, ecrire, joursVentes, siPeriodeNommee } from './donnees.js';
+import { etat, lire, ecrire, joursVentes, siPeriodeNommee, ventesNF } from './donnees.js';
 import { barreMode, joli } from './ecrans.js';
 import { icone } from './icones.js';
 import { besoinsRamadan, carteExports, brancherBesoins, actionBesoins, jour, fr } from './besoins.js';
@@ -84,7 +84,7 @@ async function ecranRamadan(nav, message = '') {
     <h1 class="titre-1">Préparer le Ramadan</h1>
     ${bandeau}
     ${message ? `<div class="bandeau bandeau--alerte">${icone('info', 'cb-ico cb-ico--24')}<span>${message}</span></div>` : ''}
-    ${carteExports(besoins, 'Pour comparer Ramadan à Ramadan')}
+    ${ventesNF() ? (besoins.some(b => !b.periode) ? `<div class="note">Les Ramadans ${besoins.filter(b => !b.periode).map(b => b.cle).join(', ')} arrivent des tickets de caisse : historique en préparation sur le Drive, réessaie dans une heure.</div>` : '') : carteExports(besoins, 'Pour comparer Ramadan à Ramadan')}
     ${R.length ? `<div class="note">L'appli a mémorisé tes Ramadans ${annees.length > 1 ? annees.slice(0, -1).join(', ') + ' et ' + annees.at(-1) : annees[0]}. Elle compare Ramadan à Ramadan, le plus récent comptant le plus, et respecte les dates limites.</div>
       <h2 class="titre-2">Produits du Ramadan <span class="note">(${L.length})</span></h2>
       ${L.length ? L.slice(0, 60).map(ligne).join('') : '<div class="carte"><div class="note">Aucun produit ne vend nettement plus pendant le Ramadan dans les exports reçus.</div></div>'}` : ''}

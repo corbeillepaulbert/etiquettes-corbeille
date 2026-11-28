@@ -51,6 +51,7 @@ Appli de La Corbeille Paul Bert. Deux versions cohabitent sur le même site GitH
 - Appels autorisés sur ce dossier et son contenu : `getFolderById`, `getFoldersByName`, `getFolders`, `getFiles`, `searchFiles`, `getName`, `getId`, `getDateCreated`, `getLastUpdated`, `getMimeType`, `getSize`, `getBlob`, et depuis la version 6 `DriveApp.getFileById` + `getParents` (lectures pures : ouvrir une facture par son identifiant et vérifier qu'elle est bien sous FACTURES ACHAT, au lieu de parcourir tout le dossier, qui prenait 30 s et plus).
 - Lecture d'une facture à la demande (actions `factures` et `facture`) : liste par `getFolders`/`getFiles` ; ouverture par `getFileById`, contrôle des parents (`getParents`) jusqu'à FACTURES ACHAT, contenu par `getBlob`, rien d'autre. Un identifiant hors de FACTURES ACHAT est refusé.
 - Même règle pour EXPORTS STOREPOS : le script n'y fait que lister et lire les fichiers posés directement dans le dossier (pas ANCIENS).
+- Même règle pour `SAUVEGARDES STOREPOS › NF525 › DONNEES_ANALYSE` (version 8) : lecture seule (`getFoldersByName`, `getFiles`, `getFilesByName`, `getName`, `getId`, `getLastUpdated`, `getBlob`) de `CA_JOUR_REGLEMENTS.csv`, `CA_JOUR_MENSUELLES.csv` et `LIGNES_PAR_MOIS/LIGNES_TICKETS_AAAAMM.txt` (Windows-1252). **`SAUVEFISCAL` (archives fiscales légales) n'est jamais ouvert.**
 - Appels interdits : `moveTo`, `setName`, `setTrashed`, `createFile`, `createFolder`, `addFile`, `removeFile`, `setDescription`, `setSharing`, `setStarred`, et toute écriture équivalente via l'API Drive avancée.
 - Les données de la V2 vivent dans un dossier à part, `APPLI V2`. Dext et l'expert-comptable continuent sans intervention.
 - Toute revue de code du script commence par une recherche de ces appels interdits.
@@ -63,9 +64,17 @@ Appli de La Corbeille Paul Bert. Deux versions cohabitent sur le même site GitH
 ## Script Apps Script
 
 - Source : `apps-script/Code.gs` (sans aucun secret ni identifiant de dossier). Installation décrite en tête du fichier.
-- Écritures du script : uniquement `createFolder` (APPLI V2 et son sous-dossier FACTURES_CACHE, une fois chacun), `createFile` et `setContent` sur les fichiers JSON de APPLI V2 (dont `FACTURES_CACHE/{idFacture}.json`).
+- Écritures du script : uniquement `createFolder` (APPLI V2 et son sous-dossier FACTURES_CACHE, une fois chacun), `createFile` et `setContent` sur les fichiers JSON de APPLI V2 (dont `FACTURES_CACHE/{idFacture}.json` et, depuis la version 8, `jours-AAAAMM.json` : ventes par jour et par code-barres, [quantité, CA TTC]).
 - Cache de lecture des factures : le script ne sait pas lire un PDF sans écrire dans le Drive (OCR de l'API Drive avancée = écriture interdite). C'est donc l'appli qui lit la facture (règles V1) et envoie fournisseur / montant / nombre de produits (`cacheEcrire`) ; le script les garde avec, pour empreinte, la date de modification du PDF, et ne les rend (`cacheLire`) que si elle n'a pas changé.
-- Version du script : `ping` renvoie `version`. L'appli exige la version 4 ou plus (version 5 pour le mode invité, qui demande d'exécuter `installer()` une fois pour autoriser l'envoi d'e-mails ; version 6 : factures ouvertes par identifiant, un seul fichier par document JSON, index du cache ; version 7 : inventaire connecté) (Réglages → « Tester la connexion Apps Script »).
+- Version du script : `ping` renvoie `version`. L'appli exige la version 4 ou plus (version 5 pour le mode invité, qui demande d'exécuter `installer()` une fois pour autoriser l'envoi d'e-mails ; version 6 : factures ouvertes par identifiant, un seul fichier par document JSON, index du cache ; version 7 : inventaire connecté ; version 8 : ventes lues dans les tickets de caisse NF525) (Réglages → « Tester la connexion Apps Script »).
+
+## Ventes : tickets de caisse NF525 (version 8)
+
+- Les ventes viennent des lignes de tickets (copie quotidienne des archives fiscales par le PC du magasin, voir le doc du projet « passation-pilot-archives-nf525 »). L'export Vente PLU n'est plus qu'un repli, et les exports RAMADAN deviennent inutiles. L'export produits (catalogue) reste indispensable : prix d'achat, fournisseur, famille.
+- Le script résume chaque mois en `jours-AAAAMM.json` (déclencheur de 15 min, seulement les mois modifiés) ; l'action `ventes` renvoie, pour les périodes demandées par l'appli, quantité et CA par code-barres, et le CA officiel par jour (`CA_JOUR_*`, une ligne par date).
+- Quantité = « quantité mesure » (kg pour les pesées), retours compris en négatif : c'est exactement la quantité de l'export Vente PLU (vérifié sur le Ramadan 2025 : 828 produits sur 828).
+- Dernier jour complet = dernière date de `CA_JOUR_REGLEMENTS` (J-2 le matin). L'appli affiche « ventes à jour au … » et ne présente jamais un jour incomplet.
+- Un export Vente PLU ne remplace jamais la référence NF525 : il est rangé comme période.
 
 ## Prix d'achat lus sur les factures
 
