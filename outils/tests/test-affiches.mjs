@@ -1,0 +1,40 @@
+import { chromium } from '/opt/npm-tools/node_modules/playwright/index.mjs';
+const out = '/home/claude/rendu/af';
+const b = await chromium.launch({ executablePath: '/usr/bin/google-chrome', args: ['--no-sandbox'] });
+const c = await b.newContext({ viewport: { width: 375, height: 812 }, deviceScaleFactor: 2, isMobile: true, hasTouch: true, acceptDownloads: true });
+const p = await c.newPage(); const errs = []; p.on('pageerror', e => errs.push(e.message));
+await p.goto('http://localhost:8766/v2/'); await p.waitForSelector('.tuile');
+await p.click('#app [data-action="donnees"]'); await p.waitForSelector('[data-fichiers]', { state: 'attached' });
+await p.setInputFiles('[data-fichiers]', ['/home/claude/data/produits.xlsx', '/home/claude/data/ventes.xlsx']);
+await p.waitForSelector('.toast', { state: 'attached', timeout: 90000 });
+await p.click('#app [data-action="accueil"]'); await p.screenshot({ path: out + '-0-accueil.png' });
+console.log('tuiles :', await p.$$eval('.tuile b', e => e.map(x => x.textContent)));
+await p.click('[data-action="affiches"]'); await p.waitForSelector('#af-q');
+console.log('caméra allumée d\'office ?', !!(await p.$('.scan-plein')));
+await p.screenshot({ path: out + '-1-vide.png' });
+await p.fill('#af-q', 'tomate'); await p.waitForSelector('[data-action="af-ajouter"]');
+console.log('recherche :', await p.$$eval('[data-af-res] .ligne__titre', e => e.slice(0, 4).map(x => x.textContent)));
+await p.click('[data-action="af-ajouter"] >> nth=0'); await p.waitForTimeout(300);
+await p.fill('#af-q', 'pois chiches'); await p.waitForTimeout(300); console.log('recherche épicerie (doit être vide) :', await p.$$eval('[data-af-res] .ligne__titre', e => e.length));
+await p.click('[data-action="af-saison"]'); await p.waitForTimeout(500);
+console.log('après saison :', await p.$$eval('[data-action="af-modifier"]', e => e.length), 'produits |', (await p.textContent('.toast')).trim());
+await p.waitForFunction(() => /Page/.test(document.querySelector('[data-af-txt]')?.textContent || ''), null, { timeout: 60000 });
+console.log('aperçu :', await p.textContent('[data-af-txt]'), '| alertes :', await p.$$eval('.bandeau--alerte span', e => e.map(x => x.textContent.slice(0, 60))));
+await p.screenshot({ path: out + '-2-paysage.png' });
+// modifier l'origine du 1er
+await p.click('[data-action="af-modifier"] >> nth=0'); await p.selectOption('[data-k="ori"]', 'MA'); await p.screenshot({ path: out + '-3-modifier.png' }); await p.click('[data-ok]'); await p.waitForTimeout(400);
+console.log('1re ligne :', (await p.textContent('[data-action="af-modifier"] .ligne__detail')).trim());
+for (const f of ['list', 'a6', 'caisse']) {
+  await p.click(`[data-action="af-format"][data-f="${f}"]`); await p.waitForFunction(() => /Page/.test(document.querySelector('[data-af-txt]')?.textContent || ''), null, { timeout: 60000 }); await p.waitForTimeout(300);
+  console.log(f, ':', await p.textContent('[data-af-txt]')); await p.screenshot({ path: `${out}-4-${f}.png` });
+}
+await p.click('[data-action="af-format"][data-f="land"]');
+const t0 = Date.now(); await p.click('[data-action="af-pdf"]'); await p.waitForSelector('[data-action="af-enregistrer"]', { timeout: 120000 });
+const [dl] = await Promise.all([p.waitForEvent('download'), p.click('[data-action="af-enregistrer"]')]);
+await dl.saveAs('/home/claude/rendu/af.pdf'); console.log('PDF en', Date.now() - t0, 'ms :', dl.suggestedFilename(), '|', (await p.textContent('.carte .note')).trim());
+await p.click('[data-action="af-vider"]'); await p.click('.toast .btn'); await p.waitForTimeout(300);
+console.log('après Tout retirer + Annuler :', await p.$$eval('[data-action="af-modifier"]', e => e.length));
+await p.reload(); await p.waitForSelector('.tuile'); await p.click('[data-action="affiches"]'); await p.waitForTimeout(300);
+console.log('après relance :', await p.$$eval('[data-action="af-modifier"]', e => e.length), 'produits gardés');
+console.log('erreurs', JSON.stringify(errs));
+await b.close();
