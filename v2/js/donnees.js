@@ -58,6 +58,25 @@ export function trouver(code) {
 let PERIODES = null;
 export async function lirePeriodes() { if (!PERIODES) PERIODES = await lire('periodes', {}); return PERIODES; }
 async function rangerPeriode(p) { const P = await lirePeriodes(); P[`${p.du}_${p.au}`] = p; await ecrire('periodes', P); }
+const joursEntre = (du, au) => Math.round((jourMs(au) - jourMs(du)) / 864e5) + 1;
+
+// ---------- ventes NF525 (tickets de caisse, mis à jour chaque matin) ----------
+/** Remplace les périodes NF525 rangées par celles reçues (les périodes venues d'exports restent). */
+export async function rangerPeriodesNF(periodes) {
+  const P = await lirePeriodes();
+  for (const k of Object.keys(P)) if (P[k].src === 'NF525') delete P[k];
+  for (const [cle, p] of Object.entries(periodes)) P[`${p.du}_${p.au}`] = { ...p, cle, src: 'NF525', jours: joursEntre(p.du, p.au), nom: `Tickets de caisse du ${p.du.split('-').reverse().join('/')} au ${p.au.split('-').reverse().join('/')}` };
+  await ecrire('periodes', P);
+}
+/** Les 365 derniers jours de tickets deviennent la référence des ventes de chaque fiche (à la place de l'export Vente PLU). */
+export async function appliquerVentesNF(p) {
+  const P = {}; // seuls les produits du catalogue : un code vendu mais absent du catalogue reste dans « produits inconnus »
+  for (const [e, o] of Object.entries(etat.produits)) P[e] = { ...o, q: p.q[e] || 0 };
+  const meta = { ...etat.meta, ventes: { nom: 'Tickets de caisse (NF525)', source: 'NF525', lignes: Object.keys(p.q).length, jours: joursEntre(p.du, p.au), du: p.du, au: p.au, date: new Date().toISOString(), v: 3 } };
+  await ecrire('produits', P); await ecrire('meta', meta);
+  etat.produits = P; etat.meta = meta;
+}
+export const ventesNF = () => etat.meta.ventes?.source === 'NF525';
 const jourMs = d => new Date(d + 'T12:00').getTime();
 /** Période rangée qui couvre [du, au] à `tol` jours près à chaque bout, sinon null. */
 export async function periodeCouvrant(du, au, tol = 2) {
@@ -116,7 +135,7 @@ export async function importerFichier(file, origine = {}) {
   if (per && !per.du && NOMMEES) per = (await NOMMEES(file.name)) || per;
   if (type === 'ventes' && nomRamadan(file.name) && !per.du) throw new Error("pas de Ramadan connu pour cette année dans le nom (ex. RAMADAN 2024)");
   // un export de Ramadan n'est jamais la référence des ventes, même si c'est le premier reçu
-  const principal = type === 'base' || ((!per.du || per.jours >= 300 || !etat.meta.ventes) && !nomRamadan(file.name));
+  const principal = type === 'base' || ((!per.du || per.jours >= 300 || !etat.meta.ventes) && !nomRamadan(file.name) && !(etat.meta.ventes && etat.meta.ventes.source === 'NF525'));
   const qm = {}, cam = {}; let caTot = 0, mvTot = 0, mvN = 0;
   const P = { ...etat.produits };
   const vus = new Set();
@@ -153,7 +172,7 @@ export async function importerFichier(file, origine = {}) {
     P[e] = o; n++;
   }
   if (per && per.du) await rangerPeriode({ ...per, nom: file.name, q: qm, ...(cCA >= 0 ? { ca: cam, caTot: Math.round(caTot * 100) / 100 } : {}), ...(mvN ? { margeTot: Math.round(mvTot * 100) / 100 } : {}) });
-  if (!principal) return { type: 'periode', lignes: n, du: per.du, au: per.au, jours: per.jours };
+  if (!principal) return { type: 'periode', lignes: n, du: per.du || '', au: per.au || '', jours: per.jours };
   if (type === 'ventes') {
     // les produits absents du nouveau fichier n'ont pas vendu sur la période
     for (const e of Object.keys(P)) if (!vus.has(e)) P[e] = { ...P[e], q: 0 };

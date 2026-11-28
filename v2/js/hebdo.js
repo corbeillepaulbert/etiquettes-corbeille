@@ -36,7 +36,7 @@ export function achats(elements, { du, au }) {
 
 /** `aFaire` : [[action, texte, nombre]] fourni par l'appli (factures, inconnus, étiquettes, prix). */
 export async function ecranHebdo(nav, { elements = [], aFaire = [] } = {}) {
-  const s = semaine(), { cette, avant } = await periodesSemaine(), A = achats(elements, s);
+  const s = semaine(), { cette, avant } = await periodesSemaine(), A = achats(elements, cette ? { du: cette.du, au: cette.au } : s);
   const besoin = [{ cle: '7j', titre: '7 derniers jours', du: s.du, au: s.au, periode: cette }];
   const P = etat.produits;
   let ventes = '';
@@ -63,7 +63,7 @@ export async function ecranHebdo(nav, { elements = [], aFaire = [] } = {}) {
   nav.afficher(`<div class="scr cb" data-ecran="hebdo">${barreMode('magasin', 'Semaine', true)}
   <div class="scr__corps">
     <h1 class="titre-1">Point de la semaine</h1>
-    <div class="note" style="margin-top:-12px">Du ${fr(s.du)} au ${fr(s.au)}</div>
+    <div class="note" style="margin-top:-12px">Du ${fr(cette ? cette.du : s.du)} au ${fr(cette ? cette.au : s.au)}</div>
     <h2 class="titre-3">Ventes</h2>
     ${ventes}
     <h2 class="titre-3">Achats</h2>

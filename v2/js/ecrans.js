@@ -18,11 +18,12 @@ export function barreMode(mode, droite = '', fermer = false) {
   return `<div class="mode mode--${mode}">${icone(mode, 'cb-ico cb-ico--24')}${noms[mode]}<span class="mode__qui">${esc(droite)}</span>${fermer ? `<button class="mode__fermer" data-action="accueil" aria-label="Fermer">${icone('x', 'cb-ico cb-ico--24')}</button>` : ''}</div>`;
 }
 
-export function ecranAccueil({ bonjour = 'Bonjour', date = '', aTraiter = 0, donnees = '', petites = [['factures', 'facture', 'Lire une facture'], ['donnees', 'import', 'Mettre à jour les ventes']], liens = [['reglages', 'Réglages']], extra = '' } = {}) {
+export function ecranAccueil({ bonjour = 'Bonjour', date = '', aTraiter = 0, donnees = '', petites = [['factures', 'facture', 'Lire une facture'], ['donnees', 'import', 'Mettre à jour les ventes']], liens = [['reglages', 'Réglages']], extra = '', haut = '' } = {}) {
   return `<div class="scr cb">
   <div class="scr__corps">
     <div class="accueil__haut"><h1 class="titre-1">${esc(bonjour)}</h1>${aTraiter ? `<button class="compteur" data-action="a-traiter">${aTraiter} à traiter</button>` : ''}</div>
     ${date ? `<div class="note" style="margin-top:-12px">${esc(date)}</div>` : ''}
+    ${haut}
     <button class="tuile tuile--magasin" data-action="mode" data-mode="magasin">${icone('magasin')}<div><b>Magasin</b><span>Prix, ventes, étiquettes</span></div></button>
     <button class="tuile tuile--achat" data-action="mode" data-mode="achat">${icone('achat')}<div><b>Achat</b><span>Combien en prendre, et pourquoi</span></div></button>
     ${extra}

@@ -19,7 +19,7 @@ import { ecranATraiter, choisirOnglet, nomFournisseur } from './atraiter.js';
 import { chargerLectures, chargerCache, lirePremieres } from './lectures.js';
 import { chargerConfig, estRelie, relier, delier, aTraiterEnCache, majATraiter, rafraichirMaintenant, marquerTraite, prendreExports, synchroniserListe, fichierFacture, testerScript, envoyerMarques, estInvite, finInvite, nomInvite, estAdmin, urlDuLien, urlValide, demanderCode, validerCode, arreterInvites, lienInvitation, siInviteFini } from './drive.js';
 import { ecranAccueilInvite, ecranDemandeInvite, ecranInviteFini, blocInviter, resteInvite } from './invite.js';
-import { toutEffacer } from './donnees.js';
+import { toutEffacer, ventesNF } from './donnees.js';
 import { aRefaire } from './refaire.js';
 import { chargerComptage, actionComptage, ecranZones, dernierEnvoi, oublierCourant, synchroniser as synchroInv, demarrer as demarrerInv } from './comptage.js';
 import { actionInventaire, ecranEntrer } from './inventaire.js';
@@ -27,6 +27,7 @@ import { estInventoriste, infoInventoriste, siInventaireFini, urlInventaireDuLie
 import { chargerNoms, actionNoms, nbNomsARevoir } from './noms.js';
 import { actionPrix, nbPrixARevoir } from './prix.js';
 import { actionHebdo } from './hebdo.js';
+import { chargerVentes, synchroniserVentes, carteVentes, ligneVentes } from './ventes.js';
 
 const app = document.getElementById('app');
 const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
@@ -88,9 +89,9 @@ async function accueil() {
     extra: `<button class="tuile tuile--fl" data-action="affiches">${icone('fruit')}<div><b>Fruits et légumes</b><span>Affiches et fiche de caisse</span></div></button>` + ram
       + (estAdmin() ? `<button class="tuile tuile--inventaire" data-action="mode" data-mode="inventaire">${icone('inventaire')}<div><b>Inventaire</b><span>Compter à plusieurs, en direct</span></div></button>` : '')
       + `<button class="tuile tuile--semaine" data-action="hebdo">${icone('semaine')}<div><b>Point de la semaine</b><span>${lundi ? "C'est lundi : dépose l'export des 7 derniers jours" : 'Ventes, achats et à faire des 7 derniers jours'}</span></div></button>`,
-    bonjour: 'Bonjour', date: dateDuJour(), aTraiter: nouveaux(), donnees: resumeDonnees(),
+    bonjour: 'Bonjour', date: dateDuJour(), aTraiter: nouveaux(), donnees: resumeDonnees(), haut: estAdmin() ? carteVentes() : '',
     petites: [['etiquettes', 'imprimer', `Étiquettes${refaire ? ` (${refaire} à refaire)` : ''}`], ['factures', 'facture', 'Travailler une facture'], ['liste', 'achat', `Ma liste d'achat${etat.liste.length ? ` (${etat.liste.length})` : ''}`]],
-    liens: [['inconnus', `Produits inconnus${aIdentifier().length ? ` (${aIdentifier().length})` : ''}`], ['donnees', 'Mettre à jour les ventes'], ['reglages', 'Réglages']]
+    liens: [['inconnus', `Produits inconnus${aIdentifier().length ? ` (${aIdentifier().length})` : ''}`], ['donnees', ventesNF() ? 'Mettre à jour les produits' : 'Mettre à jour les ventes'], ['reglages', 'Réglages']]
   }), 'accueil');
 }
 
@@ -182,8 +183,9 @@ function donnees(message = '') {
   <div class="scr__corps">
     <h1 class="titre-1">Mettre à jour</h1>
     ${message ? `<div class="bandeau bandeau--alerte">${icone('info', 'cb-ico cb-ico--24')}<span>${esc(message)}</span></div>` : ''}
-    <div>Choisis les deux exports de StorePOS : le fichier des produits et le fichier des ventes (Vente PLU). L'appli reconnaît chacun toute seule.</div>
+    <div>${ventesNF() ? "Choisis l'export des produits de StorePOS. Les ventes arrivent toutes seules, chaque matin, depuis les tickets de caisse." : "Choisis les deux exports de StorePOS : le fichier des produits et le fichier des ventes (Vente PLU). L'appli reconnaît chacun toute seule."}</div>
     <div class="infos carte">${ligne('Produits', m.base)}${ligne('Ventes', m.ventes)}</div>
+    ${ligneVentes()}
     <div class="note">Rien n'est envoyé à la caisse : l'appli lit seulement.</div>
     <div data-zone-msg></div>
   </div>
@@ -515,6 +517,7 @@ async function syncFond(force = false) {
       const faits = await prendreExports();
       if (faits.length) toast(`Mis à jour depuis le Drive : ${faits.map(r => nomImport(r).toLowerCase()).join(' et ')}`);
     } catch (x) { }
+    if (estAdmin()) { try { await synchroniserVentes(); } catch (x) { console.warn('[V2/Ventes]', x.message); } }
     try { if (await lire('listeAEnvoyer', false) || force || ecranCourant === 'liste') await synchroniserListe(); } catch (x) { }
     if (!estInvite()) { try { if (await lire('inconnusAEnvoyer', false) || force) await synchroniserInconnus(); } catch (x) { } }
   } finally {
@@ -543,6 +546,7 @@ document.addEventListener('visibilitychange', () => { if (document.visibilitySta
   await chargerEtiquettes();
   await chargerNoms();
   await chargerComptage();
+  await chargerVentes();
   await chargerFacture();
   await chargerAffiches();
   await chargerConseil();
