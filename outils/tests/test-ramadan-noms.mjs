@@ -1,0 +1,35 @@
+import { chromium } from '/opt/npm-tools/node_modules/playwright/index.mjs';
+import { monDrive, violations, fichier } from './gas-mock.mjs';
+import fs from 'node:fs';
+const CLE = 'une-phrase-secrete-tres-longue-pour-le-test';
+const { ctx, props } = monDrive(); props.CLE_APPLI = CLE;
+const exp = ctx.DriveApp.getFoldersByName('EXPORTS STOREPOS').next();
+const D = '/home/claude/data/';
+exp._f.push(fichier('RAMADAN 2023.xlsx', fs.readFileSync(D + 'EXPORT_PLU_23_03_23_20_04_23.xlsx'), { ro: true, cree: new Date(Date.now() + 1000) }));
+exp._f.push(fichier('RAMADAN 2024.xlsx', fs.readFileSync(D + 'EXPORT_PLU_11_03_24_09_04_24.xlsx'), { ro: true, cree: new Date(Date.now() + 2000) }));
+exp._f.push(fichier('RAMADAN 2025.xlsx', fs.readFileSync(D + 'EXPORT_PLU_01_03_25_29_03_25.xlsx'), { ro: true, cree: new Date(Date.now() + 3000) }));
+ctx.installer();
+const b = await chromium.launch({ executablePath: '/usr/bin/google-chrome', args: ['--no-sandbox'] });
+const c = await b.newContext({ viewport: { width: 375, height: 812 }, deviceScaleFactor: 2, isMobile: true, hasTouch: true });
+await c.route('https://script.google.com/**', async r => { const res = ctx.doPost({ postData: { contents: r.request().postData() } }); await r.fulfill({ status: 200, contentType: 'application/json', headers: { 'Access-Control-Allow-Origin': '*' }, body: res.texte }); });
+const p = await c.newPage(); const errs = []; p.on('pageerror', e => errs.push(e.message));
+await p.goto('http://localhost:8766/v2/'); await p.waitForSelector('.tuile');
+await p.click('[data-action="reglages"]'); await p.fill('#drv-url', 'https://script.google.com/macros/s/AKfycbTEST_abc-123/exec'); await p.fill('#drv-cle', CLE); await p.click('[data-action="relier"]'); await p.waitForSelector('[data-action="delier"]'); await p.click('[data-action="fin-reglages"]');
+await p.waitForFunction(() => /produits/.test(document.body.textContent) && !/Aucun produit/.test(document.body.textContent), null, { timeout: 120000 }); await p.waitForTimeout(5000);
+const etat = () => p.evaluate(() => import('/v2/js/donnees.js').then(async m => ({ ref: m.etat.meta.ventes.nom + ' (' + m.etat.meta.ventes.jours + ' j)', per: Object.values(await m.lirePeriodes()).map(x => `${x.nom} ${x.du}→${x.au}`) })));
+console.log('1.', JSON.stringify(await etat()));
+await p.click('[data-mode="achat"]'); await p.click('[data-action="ramadan"]'); await p.waitForSelector('[data-ecran="ramadan"]'); await p.waitForTimeout(500);
+console.log('2. carte export ?', !!(await p.$('.exp-carte')), '| tendance citée ?', /tendance|4 dernières/i.test(await p.textContent('.scr__corps')));
+console.log('2. note :', (await p.textContent('.scr__corps .note')).trim().slice(0, 160));
+console.log('2. produits :', await p.$$eval('.ram-ligne .ligne__detail', e => e.slice(0, 3).map(x => x.textContent)));
+await p.screenshot({ path: '/home/claude/rendu/ram-noms.png', fullPage: false });
+// réparation : référence abîmée par un ancien import
+await p.evaluate(() => import('/v2/js/donnees.js').then(async m => { m.etat.meta.ventes = { ...m.etat.meta.ventes, nom: 'RAMADAN 2025.xlsx', jours: 365 }; await m.ecrire('meta', m.etat.meta); }));
+await p.evaluate(() => import('/v2/js/drive.js').then(m => m.prendreExports()));
+console.log('3. après réparation :', JSON.stringify(await etat()).slice(0, 120));
+// carte des manquants : on retire 2024
+await p.evaluate(() => import('/v2/js/donnees.js').then(async m => { const P = await m.lirePeriodes(); for (const k of Object.keys(P)) if (/2024/.test(P[k].nom)) delete P[k]; await m.ecrire('periodes', P); }));
+await p.click('[data-action="mode"][data-mode="achat"]'); await p.click('[data-action="ramadan"]'); await p.waitForTimeout(500);
+console.log('4. demande :', (await p.textContent('.exp-carte')).replace(/\s+/g, ' ').slice(0, 220));
+console.log('violations', violations, '| erreurs', errs);
+await b.close();
